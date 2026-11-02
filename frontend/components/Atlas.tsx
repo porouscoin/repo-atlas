@@ -5,17 +5,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ask,
+  fetchEvidence,
   fetchExplain,
   fetchLevel,
   fetchRepo,
   fetchSummary,
   type AskEvent,
+  type Evidence,
   type Explain,
   type Level,
   type Snapshot,
 } from "@/lib/api";
-import { buildGraph, shortNumber } from "@/lib/graph";
-import type { Box } from "@/lib/layout";
+import { buildGraph, dependents, pairsBetween, shortNumber, type Graph } from "@/lib/graph";
+import type { Box, Link as Arrow } from "@/lib/layout";
 import Diagram from "./Diagram";
 import { ArrowUp, ChevronLeft, Close, External, Logo, Star } from "./Icons";
 import Markdown from "./Markdown";
@@ -65,6 +67,7 @@ export default function Atlas({ slug }: { slug: string }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [litPaths, setLitPaths] = useState<string[] | null>(null);
+  const [arrow, setArrow] = useState<Arrow | null>(null);
   const chatEnd = useRef<HTMLDivElement>(null);
 
   // --------------------------------------------------------------- loading
@@ -99,6 +102,7 @@ export default function Atlas({ slug }: { slug: string }) {
     let alive = true;
     setLevelError("");
     setSelected(null);
+    setArrow(null);
     setExplainError("");
     fetchLevel(snapshot.slug, snapshot.sha, path)
       .then((lv) => {
@@ -153,9 +157,35 @@ export default function Atlas({ slug }: { slug: string }) {
       return;
     }
     setSelected(k);
+    setArrow(null);
     setTab("explain");
     if (b.kind === "file") loadSummary(b.target);
   };
+
+  const prove = (l: Arrow) => {
+    setSelected(null);
+    setArrow(l);
+    setTab("explain");
+  };
+
+  // What a change to the selected box would reach: every file that imports
+  // it, directly or through other files, counted per box on this level.
+  const blast = useMemo(() => {
+    if (!graph || !level || selected === null) return null;
+    const b = level.boxes[selected];
+    if (!b) return null;
+    const d = dependents(graph, b.files);
+    const reached = new Set(d.all);
+    const perBox = new Map<number, number>();
+    let onLevel = 0;
+    level.boxes.forEach((o, k) => {
+      if (k === selected) return;
+      const n = o.files.filter((f) => reached.has(f)).length;
+      if (n) perBox.set(k, n);
+      onLevel += n;
+    });
+    return { ...d, perBox, outside: d.all.length - onLevel };
+  }, [graph, level, selected]);
 
   // Boxes on this level that hold files the AI mentioned.
   const lit = useMemo(() => {
@@ -352,13 +382,17 @@ export default function Atlas({ slug }: { slug: string }) {
             start={explain?.start ?? ""}
             selected={selected}
             lit={lit}
+            impact={blast?.perBox.size ? blast.perBox : null}
+            link={arrow}
             onOpen={open}
+            onLink={prove}
           />
         )}
         {level && (
           <p className="hint">
-            Arrows point from a part to the parts it uses. Click a box for
-            details, click a folder again to open it.
+            Arrows point from a part to the parts it uses. Click an arrow to
+            see the import lines behind it, or a box to see what depends on
+            it.
           </p>
         )}
       </main>
@@ -381,7 +415,17 @@ export default function Atlas({ slug }: { slug: string }) {
 
         {tab === "explain" && level && (
           <div className="side-body">
-            {!box ? (
+            {arrow && level.boxes[arrow.from] && level.boxes[arrow.to] ? (
+              <LinkDetails
+                key={`${arrow.from}-${arrow.to}`}
+                from={level.boxes[arrow.from]}
+                to={level.boxes[arrow.to]}
+                snapshot={snapshot}
+                graph={graph}
+                github={github}
+                onBack={() => setArrow(null)}
+              />
+            ) : !box ? (
               <>
                 <h2>{level.path ? here?.name + "/" : "What this repo is"}</h2>
                 <p className="muted">
@@ -422,12 +466,14 @@ export default function Atlas({ slug }: { slug: string }) {
                     <ul className="flows">
                       {level.links.slice(0, 6).map((l, k) => (
                         <li key={k}>
-                          <strong>{level.boxes[l.from].name}</strong> uses{" "}
-                          <strong>{level.boxes[l.to].name}</strong>
-                          <span>
-                            {" "}
-                            · {l.count} import{l.count === 1 ? "" : "s"}
-                          </span>
+                          <button onClick={() => prove(l)}>
+                            <strong>{level.boxes[l.from].name}</strong> uses{" "}
+                            <strong>{level.boxes[l.to].name}</strong>
+                            <span>
+                              {" "}
+                              · {l.count} import{l.count === 1 ? "" : "s"}
+                            </span>
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -462,6 +508,7 @@ export default function Atlas({ slug }: { slug: string }) {
                   box.kind === "file" ? summaries[box.target] : undefined
                 }
                 github={github}
+                blast={blast}
                 onBack={() => setSelected(null)}
                 onOpenFolder={() => go(box.target)}
                 onShow={showPath}
@@ -555,16 +602,18 @@ function BoxDetails({
   role,
   summary,
   github,
+  blast,
   onBack,
   onOpenFolder,
   onShow,
 }: {
   box: Box;
   snapshot: Snapshot;
-  graph: ReturnType<typeof buildGraph>;
+  graph: Graph;
   role?: string;
   summary?: string;
   github: string;
+  blast: { all: number[]; direct: Set<number> } | null;
   onBack: () => void;
   onOpenFolder: () => void;
   onShow: (p: string) => void;
@@ -599,6 +648,7 @@ function BoxDetails({
         </button>
       )}
       {box.parts && <p className="muted">Includes {box.parts.join(", ")}.</p>}
+      {blast && <Blast blast={blast} graph={graph} onShow={onShow} />}
 
       {fileIdx !== null ? (
         <>
@@ -740,5 +790,131 @@ function RepoFacts({
         </>
       )}
     </dl>
+  );
+}
+
+function Blast({
+  blast,
+  graph,
+  onShow,
+}: {
+  blast: { all: number[]; direct: Set<number> };
+  graph: Graph;
+  onShow: (p: string) => void;
+}) {
+  const n = blast.all.length;
+  const folders = new Map<string, number>();
+  for (const f of blast.all) {
+    const d = graph.folderOf[f];
+    folders.set(d, (folders.get(d) || 0) + 1);
+  }
+  const top = [...folders].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  return (
+    <>
+      <h3>If you change this</h3>
+      {n === 0 ? (
+        <p className="muted">Nothing else in the repo imports it.</p>
+      ) : (
+        <div className="blast">
+          <p className="blast-num">
+            <strong>{n.toLocaleString()}</strong>{" "}
+            file{n === 1 ? " depends" : "s depend"} on it, {blast.direct.size}{" "}
+            directly. They are outlined on the diagram.
+          </p>
+          <ul className="file-list">
+            {top.map(([d, c]) => (
+              <li key={d}>
+                <button onClick={() => onShow(d ? d + "/" : "")}>
+                  <span>{d ? d + "/" : "(root)"}</span>
+                  <em>{c}</em>
+                </button>
+              </li>
+            ))}
+            {folders.size > top.length && (
+              <li className="more">and {folders.size - top.length} more folders</li>
+            )}
+          </ul>
+        </div>
+      )}
+    </>
+  );
+}
+
+function LinkDetails({
+  from,
+  to,
+  snapshot,
+  graph,
+  github,
+  onBack,
+}: {
+  from: Box;
+  to: Box;
+  snapshot: Snapshot;
+  graph: Graph;
+  github: string;
+  onBack: () => void;
+}) {
+  const files = snapshot.files;
+  const pairs = useMemo(() => pairsBetween(graph, from.files, to.files), [graph, from, to]);
+  const [proof, setProof] = useState<Evidence[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const ask = pairs.slice(0, 40).map(([a, b]) => [files[a].path, files[b].path] as [string, string]);
+    fetchEvidence(snapshot.slug, snapshot.sha, ask)
+      .then((e) => alive && setProof(e))
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [pairs, files, snapshot.slug, snapshot.sha]);
+  const users = new Set(pairs.map((p) => p[0])).size;
+  const name = (b: Box) => (b.kind === "folder" ? b.name + "/" : b.name);
+  return (
+    <>
+      <button className="back" onClick={onBack}>
+        <ChevronLeft size={14} /> Overview
+      </button>
+      <h2>
+        {name(from)} uses {name(to)}
+      </h2>
+      <p className="muted">
+        {pairs.length} import{pairs.length === 1 ? "" : "s"} from {users} file{users === 1 ? "" : "s"}. Each one
+        is the real line in the code, linked to GitHub.
+      </p>
+      {failed && <p className="muted">Couldn&apos;t load the import lines right now.</p>}
+      {!proof && !failed && <p className="summary loading">Finding the import lines…</p>}
+      {proof && (
+        <ul className="proof">
+          {proof.map((e, k) => (
+            <li key={k}>
+              <div className="proof-head">
+                <span title={e.from}>{e.from}</span>
+                <a
+                  href={`${github}/blob/${snapshot.sha}/${e.from}${e.line ? `#L${e.line}` : ""}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {e.line ? `line ${e.line}` : "open"} ↗
+                </a>
+              </div>
+              {e.text && (
+                <pre>
+                  <i>{e.line}</i>
+                  {e.text.trim()}
+                </pre>
+              )}
+              <div className="proof-to" title={e.to}>
+                → {e.to}
+              </div>
+            </li>
+          ))}
+          {pairs.length > proof.length && (
+            <li className="more muted small">and {pairs.length - proof.length} more imports</li>
+          )}
+        </ul>
+      )}
+    </>
   );
 }

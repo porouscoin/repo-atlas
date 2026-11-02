@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from . import ai, store
 from .analyze import build_snapshot
 from .config import models_for, settings
+from .imports import Resolver
 from .levels import level_view
 from .github import RepoError, download_tarball, parse_repo, read_tarball, repo_info
 from .providers import ProviderError, RateLimited
@@ -127,6 +128,35 @@ async def post_summary(request: Request, body: SummaryIn):
     except ProviderError as e:
         print(f"summary failed: {e}")
         raise HTTPException(502, "The AI couldn't summarize this file right now.")
+
+
+class EvidenceIn(BaseModel):
+    slug: str
+    sha: str
+    pairs: list[tuple[str, str]] = Field(max_length=40)
+
+
+_resolvers: dict[tuple[str, str], Resolver] = {}
+
+
+@app.post("/api/evidence")
+async def post_evidence(body: EvidenceIn):
+    """The exact source line behind each import arrow, so nothing in the diagram is taken on trust."""
+    slug = check(body.slug, body.sha)
+    _, texts = await repo_state(slug, body.sha)
+    key = (slug, body.sha)
+    resolver = _resolvers.get(key)
+    if resolver is None:
+        if len(_resolvers) > 8:
+            _resolvers.pop(next(iter(_resolvers)))
+        resolver = _resolvers[key] = Resolver(texts)
+    out = []
+    for src, dst in body.pairs:
+        if src not in texts or dst not in texts:
+            continue
+        hit = resolver.evidence(src, dst)
+        out.append({"from": src, "to": dst, "line": hit[0] if hit else None, "text": hit[1][:200] if hit else ""})
+    return {"evidence": out}
 
 
 class Turn(BaseModel):

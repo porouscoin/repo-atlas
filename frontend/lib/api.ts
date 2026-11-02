@@ -113,3 +113,16 @@ export async function ask(
     }
   }
 }
+
+export type Evidence = { from: string; to: string; line: number | null; text: string };
+
+export async function fetchEvidence(slug: string, sha: string, pairs: [string, string][]): Promise<Evidence[]> {
+  const r = await asJson<{ evidence: Evidence[] }>(
+    await fetch(`${API}/api/evidence`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug, sha, pairs }),
+    }),
+  );
+  return r.evidence;
+}

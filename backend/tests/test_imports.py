@@ -118,3 +118,19 @@ def test_stack_detection():
     assert {"FastAPI", "Pydantic", "HTTPX", "Uvicorn", "TypeScript"} <= set(d["stack"])
     assert d["tools"] == ["Docker", "GitHub Actions"]
     assert "backend/app/main.py" in d["entries"] and "tests/main.py" not in d["entries"]
+
+
+def test_evidence_points_at_the_import_line():
+    from app.imports import Resolver
+
+    files = {
+        "pkg/__init__.py": "",
+        "pkg/db.py": "x = 1\n",
+        "pkg/app.py": "import os\n\nfrom .db import x\n",
+        "web/main.ts": "const a = 1;\nimport { b } from './util';\n",
+        "web/util.ts": "export const b = 2;\n",
+    }
+    r = Resolver(files)
+    assert r.evidence("pkg/app.py", "pkg/db.py") == (3, "from .db import x")
+    assert r.evidence("web/main.ts", "web/util.ts") == (2, "import { b } from './util';")
+    assert r.evidence("pkg/app.py", "web/util.ts") is None

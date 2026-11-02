@@ -28,3 +28,29 @@ export function shortNumber(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
   return String(n);
 }
+
+/** Every file that would feel a change to `files`, directly or through others. */
+export function dependents(g: Graph, files: number[]): { all: number[]; direct: Set<number> } {
+  const inside = new Set(files);
+  const direct = new Set<number>();
+  for (const f of files) for (const i of g.importers[f]) if (!inside.has(i)) direct.add(i);
+  const seen = new Set<number>(direct);
+  const queue = [...direct];
+  while (queue.length) {
+    const v = queue.pop()!;
+    for (const i of g.importers[v])
+      if (!inside.has(i) && !seen.has(i)) {
+        seen.add(i);
+        queue.push(i);
+      }
+  }
+  return { all: [...seen], direct };
+}
+
+/** File pairs (user, used) behind an arrow from one set of files to another. */
+export function pairsBetween(g: Graph, from: number[], to: number[]): [number, number][] {
+  const target = new Set(to);
+  const out: [number, number][] = [];
+  for (const a of from) for (const b of g.imports[a]) if (target.has(b)) out.push([a, b]);
+  return out;
+}

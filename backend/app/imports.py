@@ -99,6 +99,10 @@ C_INCLUDE = re.compile(r'^\s*#\s*include\s*"([^"]+)"', re.M)
 RUBY_REL = re.compile(r"""^\s*require_relative\s*\(?\s*['"]([^'"]+)['"]""", re.M)
 
 
+IMPORTISH = re.compile(r"\b(import|from|require|require_relative|include|use|mod|export)\b|@(import|use|forward)|^\s*\"[\w./-]+\"\s*$")
+GO_LONE_PATH = re.compile(r'^\s*(?:\w+\s+)?"[^"]+"\s*$')
+
+
 class Resolver:
     """Built once per repo, then asked for the edges of each file."""
 
@@ -195,8 +199,33 @@ class Resolver:
 
     # ------------------------------------------------------------ languages
 
-    def imports_of(self, path: str) -> list[str]:
-        text = self.files.get(path) or ""
+    def evidence(self, path: str, target: str) -> tuple[int, str] | None:
+        """The line in `path` that imports `target`: (1-based line number, its text).
+
+        Each import-looking line is resolved on its own, so the answer is the
+        same resolution the diagram used. Multi-line imports fall back to the
+        first line that names the target module.
+        """
+        lines = (self.files.get(path) or "").splitlines()
+        lang = language(path)
+        for i, line in enumerate(lines):
+            if not IMPORTISH.search(line):
+                continue
+            probe = line
+            if lang == "Go" and GO_LONE_PATH.match(line):
+                probe = "import " + line.strip()
+            if target in self.imports_of(path, probe):
+                return i + 1, line.strip()
+        stem = posixpath.splitext(posixpath.basename(target))[0]
+        if stem in ("__init__", "index", "mod", "lib"):
+            stem = posixpath.basename(posixpath.dirname(target)) or stem
+        for i, line in enumerate(lines):
+            if IMPORTISH.search(line) and re.search(rf"\b{re.escape(stem)}\b", line):
+                return i + 1, line.strip()
+        return None
+
+    def imports_of(self, path: str, text: str | None = None) -> list[str]:
+        text = (self.files.get(path) or "") if text is None else text
         lang = language(path)
         try:
             if lang == "Python":

@@ -12,7 +12,10 @@ type Props = {
   start: string;
   selected: number | null;
   lit: Set<number> | null; // boxes the AI pointed at
+  impact: Map<number, number> | null; // box -> how many of its files depend on the selected box
+  link: Link | null; // the arrow whose proof is open
   onOpen: (b: Box, k: number) => void;
+  onLink: (l: Link) => void;
 };
 
 const PAD = 48;
@@ -21,7 +24,7 @@ const MARGIN_LANE = 14; // spacing of back links running down the right margin
 type Pt = [number, number];
 type Route = { points: Pt[]; back: boolean; label: Pt };
 
-export default function Diagram({ boxes, links: allLinks, roles, start, selected, lit, onOpen }: Props) {
+export default function Diagram({ boxes, links: allLinks, roles, start, selected, lit, impact, link, onOpen, onLink }: Props) {
   const { shown: links, hidden } = useMemo(() => simplify(allLinks, boxes.length), [allLinks, boxes.length]);
   const wrap = useRef<HTMLDivElement>(null);
   const [avail, setAvail] = useState(1200);
@@ -55,6 +58,7 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
   const step = (d: number) => setZoom(Math.round(Math.max(0.4, Math.min(1.6, scale + d)) * 10) / 10);
 
   const focus = hover ?? selected;
+  const proving = link !== null && hover === null;
   const near = useMemo(() => {
     if (focus === null) return null;
     const s = new Set([focus]);
@@ -85,12 +89,21 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
             {links.map((l, k) => {
               const r = routes[k];
               const d = rounded(r.points, 10);
-              const active = focus !== null && (l.from === focus || l.to === focus);
-              const dim = focus !== null && !active;
-              const showLabel = hoverLink === k || (hover !== null && active && links.filter((x) => x.from === hover || x.to === hover).length <= 3);
+              const chosen = proving && l.from === link.from && l.to === link.to;
+              const active = proving ? chosen : focus !== null && (l.from === focus || l.to === focus);
+              const dim = (focus !== null || proving) && !active && hoverLink !== k;
+              const showLabel = hoverLink === k || chosen || (hover !== null && active && links.filter((x) => x.from === hover || x.to === hover).length <= 3);
               return (
-                <g key={k} className={`link ${active ? "active" : ""} ${dim ? "dim" : ""} ${r.back ? "back" : ""}`}>
-                  <path d={d} className="hit" onMouseEnter={() => setHoverLink(k)} onMouseLeave={() => setHoverLink(null)} />
+                <g key={k} className={`link ${active ? "active" : ""} ${dim ? "dim" : ""} ${r.back ? "back" : ""} ${chosen ? "chosen" : ""}`}>
+                  <path
+                    d={d}
+                    className="hit"
+                    onMouseEnter={() => setHoverLink(k)}
+                    onMouseLeave={() => setHoverLink(null)}
+                    onClick={() => onLink(l)}
+                  >
+                    <title>Show the imports behind this arrow</title>
+                  </path>
                   <path d={d} className="line" strokeWidth={1.4 + (l.count / maxCount) * 2.6} markerEnd="url(#arrow)" />
                   {showLabel && (
                     <text x={r.label[0]} y={r.label[1]} className="link-label" textAnchor="middle">
@@ -110,11 +123,13 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
 
           {boxes.map((b, k) => {
             const p = lay.boxes[k];
-            const dim = (near && !near.has(k)) || (lit && !lit.has(k));
+            const inLink = link !== null && (k === link.from || k === link.to);
+            const hits = impact?.get(k);
+            const dim = proving ? !inLink : (near && !near.has(k) && !hits) || (lit && !lit.has(k));
             return (
               <button
                 key={b.id}
-                className={`card ${b.kind} ${selected === k ? "selected" : ""} ${dim ? "dim" : ""} ${lit?.has(k) ? "lit" : ""}`}
+                className={`card ${b.kind} ${selected === k || inLink ? "selected" : ""} ${dim ? "dim" : ""} ${lit?.has(k) ? "lit" : ""} ${hits ? "impact" : ""}`}
                 style={{ left: PAD + p.x, top: PAD + p.y, width: CARD_W, height: CARD_H }}
                 onMouseEnter={() => setHover(k)}
                 onMouseLeave={() => setHover(null)}
@@ -122,7 +137,13 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
               >
                 <div className="card-top">
                   <span className="card-name">{b.kind === "folder" ? `${b.name}/` : b.name}</span>
-                  {start === b.name && <span className="start-tag">Start here</span>}
+                  {hits ? (
+                    <span className="impact-tag">
+                      {hits} file{hits === 1 ? "" : "s"} affected
+                    </span>
+                  ) : (
+                    start === b.name && <span className="start-tag">Start here</span>
+                  )}
                 </div>
                 <p className={`card-role ${roles ? "" : "loading"}`}>
                   {roles ? roles[b.name] || (b.parts ? b.parts.slice(0, 4).join(", ") + "…" : "") : "Reading…"}
