@@ -75,6 +75,11 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
 
   return (
     <div className="diagram-wrap" ref={wrap}>
+      {hidden > 0 && (
+        <p className="hidden-note">
+          Showing the main links. {hidden} weaker or reverse link{hidden === 1 ? " is" : "s are"} hidden.
+        </p>
+      )}
       <div className="diagram" style={{ width: W * scale, height: H * scale }}>
         <div style={{ width: W, height: H, transform: `scale(${scale})`, transformOrigin: "0 0", position: "relative" }}>
           <svg className="arrows" width={W} height={H}>
@@ -92,7 +97,7 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
               const x2 = PAD + b.x + CARD_W / 2 + (down ? ports.get(`to${k}`) || 0 : CARD_W / 2);
               const y2 = PAD + b.y + (down ? 0 : CARD_H / 2);
               const d = down
-                ? `M${x1} ${y1} C${x1} ${y1 + 40} ${x2} ${y2 - 40} ${x2} ${y2 - 2}`
+                ? downPath(x1, y1, x2, y2, l.from, l.to, lay.boxes)
                 : `M${x1} ${y1} C${x1 + 70} ${y1} ${x2 + 70} ${y2} ${x2 + 2} ${y2}`;
               const active = focus !== null && (l.from === focus || l.to === focus);
               const dim = focus !== null && !active;
@@ -100,7 +105,7 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
                 <g key={k} className={`link ${active ? "active" : ""} ${dim ? "dim" : ""} ${down ? "" : "back"}`}>
                   <path d={d} className="hit" onMouseEnter={() => setHoverLink(k)} onMouseLeave={() => setHoverLink(null)} />
                   <path d={d} className="line" strokeWidth={1.2 + (l.count / maxCount) * 3.2} markerEnd="url(#arrow)" />
-                  {(active || hoverLink === k) && (
+                  {(hoverLink === k || (hover !== null && active && links.filter((x) => x.from === hover || x.to === hover).length <= 3)) && (
                     <text x={(x1 + x2) / 2 + (down ? 8 : 74)} y={(y1 + y2) / 2} className="link-label">
                       {boxes[l.from].name} uses {boxes[l.to].name} · {l.count} import{l.count === 1 ? "" : "s"}
                     </text>
@@ -110,11 +115,6 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
             })}
           </svg>
 
-          {hidden > 0 && (
-            <p className="hidden-note" style={{ top: 8, left: PAD, width: lay.width }}>
-              Showing the main links. {hidden} weaker or reverse link{hidden === 1 ? " is" : "s are"} hidden.
-            </p>
-          )}
           {lay.looseRowY !== null && (
             <div className="loose-label" style={{ top: PAD + lay.looseRowY, left: PAD, width: lay.width }}>
               <span>Not linked by imports</span>
@@ -161,4 +161,33 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
       </div>
     </div>
   );
+}
+
+type Placed = { x: number; y: number };
+
+const bez = (t: number, a: number, b: number, c: number, d: number) =>
+  (1 - t) ** 3 * a + 3 * (1 - t) ** 2 * t * b + 3 * (1 - t) * t ** 2 * c + t ** 3 * d;
+
+// A downward arrow, bent around any card that sits in its way (links that skip rows).
+function downPath(x1: number, y1: number, x2: number, y2: number, from: number, to: number, placed: Placed[]): string {
+  const straight = `M${x1} ${y1} C${x1} ${y1 + 40} ${x2} ${y2 - 40} ${x2} ${y2 - 2}`;
+  const m = 10;
+  const inCard = (x: number, y: number) =>
+    placed.findIndex(
+      (b, k) => k !== from && k !== to && x > PAD + b.x - m && x < PAD + b.x + CARD_W + m && y > PAD + b.y - m && y < PAD + b.y + CARD_H + m,
+    );
+  const blockers = new Set<number>();
+  for (let t = 0.05; t < 1; t += 0.05) {
+    const k = inCard(bez(t, x1, x1, x2, x2), bez(t, y1, y1 + 40, y2 - 40, y2));
+    if (k >= 0) blockers.add(k);
+  }
+  if (!blockers.size) return straight;
+  const bs = [...blockers].map((k) => placed[k]);
+  const left = Math.min(...bs.map((b) => PAD + b.x)) - 18;
+  const right = Math.max(...bs.map((b) => PAD + b.x + CARD_W)) + 18;
+  const mid = (x1 + x2) / 2;
+  const wx = Math.abs(mid - left) <= Math.abs(right - mid) ? left : right;
+  const top = Math.min(...bs.map((b) => PAD + b.y)) - 8;
+  const bottom = Math.max(...bs.map((b) => PAD + b.y + CARD_H)) + 8;
+  return `M${x1} ${y1} C${x1} ${y1 + 30} ${wx} ${top - 30} ${wx} ${top} L${wx} ${bottom} C${wx} ${bottom + 30} ${x2} ${y2 - 30} ${x2} ${y2 - 2}`;
 }

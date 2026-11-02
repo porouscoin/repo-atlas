@@ -34,7 +34,7 @@ def models_for(task: str) -> list[ModelSpec]:
     """The models to try for a task, best first. A busy or failing model hands
     over to the next one, so a free-tier rate limit rarely reaches the visitor.
 
-    task: "agent" (ask and tour, needs good tool use) or "summary" (short and fast).
+    task: "agent" (ask, needs good tool use) or "summary" (short and fast).
     """
     if env("ENABLE_MOCK_MODEL") == "1":
         return [_spec("mock", "mock", "mock")]
@@ -61,9 +61,8 @@ class Settings:
     supabase_key: str = env("SUPABASE_SERVICE_ROLE_KEY")
     frontend_origin: str = env("FRONTEND_ORIGIN", "http://localhost:3000")
     frontend_origin_regex: str = env("FRONTEND_ORIGIN_REGEX", r"https://repo-atlas[a-z0-9-]*\.vercel\.app")
-    max_files: int = int(env("MAX_FILES", "4000"))  # files drawn in the galaxy
+    max_files: int = int(env("MAX_FILES", "4000"))  # files read per repo
     max_tarball_mb: int = int(env("MAX_TARBALL_MB", "60"))
-    max_commits: int = int(env("MAX_COMMITS", "200"))  # commits replayed in the time-lapse
     max_steps: int = int(env("MAX_AGENT_STEPS", "6"))
     asks_per_hour: int = int(env("ASKS_PER_HOUR", "20"))
     repos_per_hour: int = int(env("REPOS_PER_HOUR", "12"))

@@ -1,7 +1,6 @@
-"""Everything that talks to GitHub: repo info, the code as a tarball, and the
-commit history for the time-lapse. Public repos only."""
+"""Everything that talks to GitHub: repo info and the code as a tarball.
+Public repos only."""
 
-import asyncio
 import io
 import re
 import tarfile
@@ -118,47 +117,3 @@ def read_tarball(data: bytes) -> dict[str, bytes]:
     return files
 
 
-async def commit_history(slug: str, sha: str, limit: int) -> list[dict]:
-    """The newest `limit` commits, oldest first, each with the files it touched."""
-    listed: list[dict] = []
-    page = 1
-    while len(listed) < limit:
-        batch = await _get_json(f"{API}/repos/{slug}/commits", {"sha": sha, "per_page": 100, "page": page})
-        if not batch:
-            break
-        listed += batch
-        page += 1
-        if len(batch) < 100:
-            break
-    listed = listed[:limit]
-
-    sem = asyncio.Semaphore(12)
-
-    async def detail(c: dict) -> dict | None:
-        async with sem:
-            try:
-                d = await _get_json(f"{API}/repos/{slug}/commits/{c['sha']}")
-            except RepoError:
-                return None
-        author = (d.get("author") or {}).get("login") or d["commit"]["author"]["name"]
-        return {
-            "sha": d["sha"][:7],
-            "author": author,
-            "date": d["commit"]["author"]["date"],
-            "message": d["commit"]["message"].split("\n")[0][:120],
-            "files": [
-                {
-                    "path": f["filename"],
-                    "status": f["status"],  # added | modified | removed | renamed
-                    "prev": f.get("previous_filename"),
-                    "add": f.get("additions", 0),
-                    "del": f.get("deletions", 0),
-                }
-                for f in (d.get("files") or [])[:300]
-            ],
-        }
-
-    details = await asyncio.gather(*(detail(c) for c in listed))
-    commits = [d for d in details if d]
-    commits.sort(key=lambda c: c["date"])
-    return commits

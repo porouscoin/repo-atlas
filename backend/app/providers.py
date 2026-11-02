@@ -62,16 +62,6 @@ def _default_mock(messages: list[dict], tools: list[dict] | None) -> ModelResult
     """A rule-based stand-in so the app runs without any API key."""
     system = str(messages[0].get("content", "")).lower()
     last = messages[-1]
-    if "tour guide" in system:
-        return ModelResult(
-            content=json.dumps(
-                {
-                    "stops": [
-                        {"target": "", "title": "The whole repo", "text": "A mock tour. Set GROQ_API_KEY for a real one."},
-                    ]
-                }
-            )
-        )
     if "plain english" in system:
         names = re.findall(r"^## (.+?) \(", str(last.get("content", "")), re.M)
         return ModelResult(

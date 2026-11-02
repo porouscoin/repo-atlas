@@ -1,5 +1,5 @@
 """The AI on top of the map: one-line file summaries, questions answered by a
-small agent that reads the code, and a guided tour."""
+small agent that reads the code, and plain-English explanations of each level."""
 
 import hashlib
 import json
@@ -247,84 +247,6 @@ async def ask(snapshot: dict, texts: dict[str, str], question: str, history: lis
             touched += [f for f in files if f not in touched]
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": output[:6000]})
             yield {"type": "tool", "name": tc.name, "args": tc.arguments, "files": files}
-
-
-# --------------------------------------------------------------------- tour
-
-TOUR_PROMPT = """You are a tour guide for Repo Atlas, a 3D map of a GitHub repo. Plan a guided tour for a
-developer seeing this repo for the first time: 5 to 7 stops, in the order that makes the codebase click
-(what it is, where it starts, the core, how pieces connect, where to look next).
-
-{overview}
-
-Reply with JSON only: {{"stops": [{{"target": "<a file path or folder path from the repo, or empty for the whole repo>",
-"title": "<2 to 5 words>", "text": "<2 short sentences, under 45 words>"}}]}}
-Targets must be exact paths from the repo. Folders end with a slash."""
-
-
-def tour_context(snapshot: dict, texts: dict[str, str]) -> str:
-    from collections import Counter
-
-    files = snapshot["files"]
-    indeg = Counter(t for _, t in snapshot["edges"])
-    picks = [files[i]["path"] for i, _ in indeg.most_common(6)]
-    readme = next((p for p in sorted(texts, key=len) if posixpath.basename(p).lower().startswith("readme")), None)
-    entry_names = ("main.py", "app.py", "__main__.py", "index.ts", "index.js", "main.go", "main.rs", "lib.rs",
-                   "server.ts", "server.js", "page.tsx", "layout.tsx", "manage.py", "cli.py")
-    entries = sorted((p for p in texts if posixpath.basename(p) in entry_names), key=lambda p: p.count("/"))[:4]
-    parts = []
-    if readme:
-        parts.append(f"--- {readme} (start)\n{texts[readme][:2500]}")
-    for p in dict.fromkeys(entries + picks):
-        head = "\n".join(texts.get(p, "").splitlines()[:30])
-        parts.append(f"--- {p} (first 30 lines)\n{head}")
-    return "\n\n".join(parts)[:14000]
-
-
-def clean_target(target: str, texts: dict[str, str]) -> str:
-    t = (target or "").strip().strip("`").lstrip("./")
-    if not t:
-        return ""
-    if t in texts:
-        return t
-    folder = t.rstrip("/")
-    if any(p.startswith(folder + "/") for p in texts):
-        return folder + "/"
-    ends = [p for p in texts if p.endswith("/" + t)]
-    return ends[0] if len(ends) == 1 else ""
-
-
-async def tour(snapshot: dict, texts: dict[str, str]) -> list[dict]:
-    key = f"tour:{snapshot['slug']}:{snapshot['sha']}"
-    cached = await store.cache_get(key)
-    if cached:
-        return cached["stops"]
-    result = await call_any(
-        models_for("agent"),
-        [
-            {"role": "system", "content": TOUR_PROMPT.format(overview=overview(snapshot))},
-            {"role": "user", "content": tour_context(snapshot, texts)},
-        ],
-        max_tokens=1800,
-        temperature=0.4,
-        json_mode=True,
-    )
-    raw = parse_json(result.content).get("stops") or []
-    stops = []
-    for s in raw[:8]:
-        if not isinstance(s, dict):
-            continue
-        stops.append(
-            {
-                "target": clean_target(str(s.get("target") or ""), texts),
-                "title": str(s.get("title") or "")[:60],
-                "text": str(s.get("text") or "")[:400],
-            }
-        )
-    if not stops:
-        raise ProviderError("The tour came back empty.")
-    await store.cache_set(key, {"stops": stops})
-    return stops
 
 
 # ------------------------------------------------------------ level explain

@@ -15,7 +15,7 @@ from . import ai, store
 from .analyze import build_snapshot
 from .config import models_for, settings
 from .levels import level_view
-from .github import RepoError, commit_history, download_tarball, parse_repo, read_tarball, repo_info
+from .github import RepoError, download_tarball, parse_repo, read_tarball, repo_info
 from .providers import ProviderError, RateLimited
 
 app = FastAPI(title="Repo Atlas")
@@ -107,24 +107,6 @@ async def get_repo(request: Request, url: str):
     return {**snapshot, "cached": False}
 
 
-@app.get("/api/history")
-async def get_history(request: Request, slug: str, sha: str):
-    """The newest commits, oldest first, for the time-lapse."""
-    slug = check(slug, sha)
-    key = f"hist:{slug}:{sha}"
-    cached = await store.cache_get(key)
-    if cached:
-        return cached
-    limit(request, "history", settings.repos_per_hour)
-    try:
-        commits = await commit_history(slug, sha, settings.max_commits)
-    except RepoError as e:
-        raise HTTPException(400, str(e))
-    data = {"slug": slug, "sha": sha, "commits": commits, "limit": settings.max_commits}
-    await store.cache_set(key, data)
-    return data
-
-
 class SummaryIn(BaseModel):
     slug: str
     sha: str
@@ -171,28 +153,6 @@ async def post_ask(request: Request, body: AskIn):
             yield f"data: {json.dumps(event)}\n\n"
 
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
-
-
-class TourIn(BaseModel):
-    slug: str
-    sha: str
-
-
-@app.post("/api/tour")
-async def post_tour(request: Request, body: TourIn):
-    slug = check(body.slug, body.sha)
-    cached = await store.cache_get(f"tour:{slug}:{body.sha}")
-    if cached:
-        return {"stops": cached["stops"]}
-    limit(request, "tour", settings.asks_per_hour)
-    snapshot, texts = await repo_state(slug, body.sha)
-    try:
-        return {"stops": await ai.tour(snapshot, texts)}
-    except RateLimited as e:
-        raise HTTPException(429, str(e))
-    except ProviderError as e:
-        print(f"tour failed: {e}")
-        raise HTTPException(502, "The AI couldn't plan a tour right now. Try again.")
 
 
 @app.get("/api/level")

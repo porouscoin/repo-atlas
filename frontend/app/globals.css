@@ -118,7 +118,7 @@ h1, h2, h3, p { margin: 0; }
 .crumbs .sep { color: var(--text-3); margin: 0 6px; }
 .hint { color: var(--text-3); font-size: 12.5px; text-align: center; margin-top: 6px; }
 
-.diagram-wrap { width: 100%; display: flex; justify-content: center; }
+.diagram-wrap { width: 100%; display: flex; flex-direction: column; align-items: center; }
 .diagram { position: relative; }
 .arrows { position: absolute; inset: 0; overflow: visible; }
 .link .line { fill: none; stroke: var(--arrow); transition: stroke .15s, opacity .15s; }
@@ -127,7 +127,7 @@ h1, h2, h3, p { margin: 0; }
 .link.active .line { stroke: var(--accent); }
 .link.dim .line { opacity: 0.18; }
 .link-label { font-size: 12px; fill: var(--text); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; font-family: var(--sans); }
-.hidden-note { position: absolute; text-align: center; color: var(--text-3); font-size: 12px; }
+.hidden-note { margin: 0 0 4px; text-align: center; color: var(--text-3); font-size: 12px; }
 .loose-label { position: absolute; display: flex; align-items: center; gap: 10px; color: var(--text-3); font-size: 12px; }
 .loose-label::before, .loose-label::after { content: ""; flex: 1; border-top: 1px dashed var(--line-2); }
 

@@ -10,6 +10,7 @@ from collections import Counter, defaultdict
 
 CODE_LANGS_EXCLUDED = {"Markdown", "Config", "Other"}
 MAX_BOXES = 12
+MAX_WITH_FILES = 8  # when loose files get their own boxes, stay smaller so it reads at a glance
 
 
 def _children(paths: list[tuple[int, str]], prefix: str):
@@ -57,8 +58,23 @@ def level_view(snapshot: dict, path: str) -> dict:
     if folders:
         for name, members in folders.items():
             boxes.append(box(prefix + name + "/", name, "folder", prefix + name + "/", members))
-        if loose:
-            boxes.append(box("loose:" + prefix, "Files here" if prefix else "Root files", "group", "", loose))
+        # Code files sitting next to folders are often the core (flask/app.py), so
+        # they get their own boxes while there's room; docs and config share one.
+        code = sorted((i for i in loose if files[i]["lang"] not in CODE_LANGS_EXCLUDED), key=lambda i: -files[i]["loc"])
+        other = [i for i in loose if files[i]["lang"] in CODE_LANGS_EXCLUDED]
+        if sum(files[i]["loc"] for i in other) == 0:
+            other = []  # marker files like py.typed aren't worth a box
+        room = MAX_WITH_FILES - len(boxes) - (1 if other else 0)
+        solo = code if len(code) <= room else code[: max(0, room - 1)]
+        for i in solo:
+            boxes.append(box(files[i]["path"], files[i]["path"].rsplit("/", 1)[-1], "file", files[i]["path"], [i]))
+        rest = [i for i in code if i not in solo]
+        if rest:
+            other_code = box("loose:" + prefix, f"{len(rest)} more files", "group", "", rest)
+            other_code["parts"] = [files[i]["path"].rsplit("/", 1)[-1] for i in rest][:20]
+            boxes.append(other_code)
+        if other:
+            boxes.append(box("docs:" + prefix, "Docs and config", "group", "", other))
     else:
         for i in loose:
             boxes.append(box(files[i]["path"], files[i]["path"].rsplit("/", 1)[-1], "file", files[i]["path"], [i]))

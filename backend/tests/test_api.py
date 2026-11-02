@@ -45,12 +45,8 @@ def fake_github(monkeypatch):
         calls["download"] += 1
         return tarball(REPO)
 
-    async def commit_history(slug, sha, limit):
-        return [{"sha": "abc1234", "author": "me", "date": "2026-01-01T00:00:00Z", "message": "init", "files": [{"path": "app/main.py", "status": "added", "prev": None, "add": 4, "del": 0}]}]
-
     monkeypatch.setattr(main, "repo_info", repo_info)
     monkeypatch.setattr(main, "download_tarball", download_tarball)
-    monkeypatch.setattr(main, "commit_history", commit_history)
     return calls
 
 
@@ -76,19 +72,11 @@ def test_repo_is_mapped_then_cached(fake_github):
     assert again["cached"] is True and fake_github["download"] == 1
 
 
-def test_history_validates_and_caches():
-    assert client.get("/api/history", params={"slug": "me/repo", "sha": "nope"}).status_code == 400
-    r = client.get("/api/history", params={"slug": "me/repo", "sha": SHA})
-    assert r.json()["commits"][0]["files"][0]["path"] == "app/main.py"
-
-
-def test_summary_and_tour():
+def test_summary():
     client.get("/api/repo", params={"url": "me/repo"})
     r = client.post("/api/summary", json={"slug": "me/repo", "sha": SHA, "path": "app/db.py"})
     assert r.status_code == 200 and r.json()["summary"]
     assert client.post("/api/summary", json={"slug": "me/repo", "sha": SHA, "path": "nope.py"}).status_code == 404
-    r = client.post("/api/tour", json={"slug": "me/repo", "sha": SHA})
-    assert r.status_code == 200 and r.json()["stops"][0]["title"]
 
 
 def test_ask_streams_tool_steps_then_answer():
@@ -147,6 +135,7 @@ def test_level_skips_wrapper_folders():
         "edges": [[0, 1]],
     }
     v = level_view(snap, "src/")
-    assert v["path"] == "src/pkg/" and [b["name"] for b in v["boxes"]] == ["sub", "Files here"]
-    assert v["links"] == [{"from": 1, "to": 0, "count": 1}]
+    assert v["path"] == "src/pkg/" and [b["name"] for b in v["boxes"]] == ["a.py", "sub"]
+    assert v["boxes"][0]["kind"] == "file"
+    assert v["links"] == [{"from": 0, "to": 1, "count": 1}]
     assert [c["name"] for c in v["crumbs"]] == ["b", "src", "pkg"]
