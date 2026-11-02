@@ -485,7 +485,7 @@ function BoxDetails({
             {biggest.map((i) => (
               <li key={i}>
                 <button onClick={() => onShow(files[i].path)}>
-                  <span>{files[i].path.slice(files[i].path.lastIndexOf("/") + 1)}</span>
+                  <span title={files[i].path}>{box.target && files[i].path.startsWith(box.target) ? files[i].path.slice(box.target.length) : files[i].path}</span>
                   <em>{shortNumber(files[i].loc)}</em>
                 </button>
               </li>

@@ -18,16 +18,15 @@ export type Box = {
 };
 export type Link = { from: number; to: number; count: number };
 
-export const CARD_W = 232;
-export const CARD_H = 104;
-const GAP_X = 28;
-const GAP_Y = 76;
-const PER_ROW = 4;
+export const CARD_W = 288;
+export const CARD_H = 136;
+export const GAP_X = 48;
+export const GAP_Y = 96;
 
 export type Placed = { x: number; y: number; row: number; loose: boolean };
 export type Layout = { boxes: Placed[]; width: number; height: number; looseRowY: number | null };
 
-export function layout(boxes: Box[], links: Link[]): Layout {
+export function layout(boxes: Box[], links: Link[], perRow = 3): Layout {
   const n = boxes.length;
   const out: number[][] = Array.from({ length: n }, () => []);
   const linked = new Array(n).fill(false);
@@ -90,10 +89,10 @@ export function layout(boxes: Box[], links: Link[]): Layout {
 
   // Wrap wide rows, then add the unlinked boxes last.
   const lines: { members: number[]; loose: boolean }[] = [];
-  for (const r of rows) for (let k = 0; k < r.length; k += PER_ROW) lines.push({ members: r.slice(k, k + PER_ROW), loose: false });
+  for (const r of rows) for (let k = 0; k < r.length; k += perRow) lines.push({ members: r.slice(k, k + perRow), loose: false });
   const loose = [...Array(n).keys()].filter((v) => !linked[v]).sort((a, b) => boxes[b].loc - boxes[a].loc);
   const firstLoose = lines.length;
-  for (let k = 0; k < loose.length; k += PER_ROW) lines.push({ members: loose.slice(k, k + PER_ROW), loose: true });
+  for (let k = 0; k < loose.length; k += perRow) lines.push({ members: loose.slice(k, k + perRow), loose: true });
 
   const widest = Math.max(1, ...lines.map((l) => l.members.length));
   const width = widest * CARD_W + (widest - 1) * GAP_X;

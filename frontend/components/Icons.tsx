@@ -62,20 +62,13 @@ export const Moon = ({ size }: P) => (
 );
 
 export function Logo({ size = 22 }: P) {
-  // A small star system: a sun with two orbiting files.
+  // Three boxes joined by right-angle connectors: a tiny version of the diagram.
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>
-      <defs>
-        <radialGradient id="ra-sun" cx="50%" cy="50%" r="50%">
-          <stop offset="0" stopColor="#fff" />
-          <stop offset="0.35" stopColor="#8fd8ff" />
-          <stop offset="1" stopColor="#3a7bff" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-      <ellipse cx="16" cy="16" rx="13" ry="6.5" fill="none" stroke="#5ad1ff" strokeOpacity="0.55" strokeWidth="1.3" transform="rotate(-24 16 16)" />
-      <circle cx="16" cy="16" r="7" fill="url(#ra-sun)" />
-      <circle cx="27.2" cy="11" r="2.1" fill="#ffd84d" />
-      <circle cx="5" cy="21.2" r="1.6" fill="#ff7a45" />
+    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden className="logo">
+      <rect x="10" y="3" width="12" height="8" rx="1.5" fill="var(--accent)" />
+      <path d="M16 11v5H7.5v5M16 16h8.5v5" fill="none" stroke="var(--text-2)" strokeWidth="1.8" strokeLinejoin="round" />
+      <rect x="2.5" y="21" width="10" height="8" rx="1.5" fill="none" stroke="var(--text)" strokeWidth="1.8" />
+      <rect x="19.5" y="21" width="10" height="8" rx="1.5" fill="none" stroke="var(--text)" strokeWidth="1.8" />
     </svg>
   );
 }
