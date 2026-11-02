@@ -6,6 +6,7 @@ from collections import Counter
 
 from .config import settings
 from .imports import Resolver, language
+from .stack import detect
 
 SKIP_DIRS = {
     "node_modules", ".git", "vendor", "dist", "build", "out", ".next", ".nuxt", ".svelte-kit",
@@ -28,7 +29,7 @@ CODE_FIRST = {"Markdown", "Config", "Other"}  # kept last when a repo has too ma
 
 def keep(path: str, data: bytes) -> bool:
     parts = path.split("/")
-    if any(p in SKIP_DIRS for p in parts[:-1]):
+    if any(p in SKIP_DIRS or p.endswith(".egg-info") for p in parts[:-1]):
         return False
     name = parts[-1]
     if name in SKIP_NAMES or name.endswith((".min.js", ".min.css", ".map")):
@@ -87,6 +88,7 @@ def build_snapshot(info: dict, raw: dict[str, bytes]) -> tuple[dict, dict[str, s
         ],
         "totals": {"files": len(files), "loc": sum(f["loc"] for f in files), "edges": len(edges)},
         "skipped_files": total - len(files),
+        **detect(texts),
     }
     return snapshot, texts
 
@@ -106,4 +108,6 @@ def overview(snapshot: dict, limit: int = 25) -> str:
         "Most imported files: " + ", ".join(hubs),
         "Largest files: " + ", ".join(biggest),
     ]
+    if snapshot.get("stack"):
+        lines.append("Built with: " + ", ".join(snapshot["stack"]))
     return "\n".join(lines)

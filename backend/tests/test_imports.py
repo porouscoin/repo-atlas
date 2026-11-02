@@ -98,3 +98,23 @@ def test_snapshot_shape_and_cap(monkeypatch):
     snap, _ = build_snapshot({"slug": "a/b", "sha": "0" * 40}, raw)
     assert snap["totals"]["files"] == 5 and snap["skipped_files"] == 6
     assert all(f["lang"] == "Python" for f in snap["files"])  # code is kept first
+
+
+def test_stack_detection():
+    from app.stack import detect
+
+    texts = {
+        "package.json": '{"dependencies": {"next": "15", "react": "19"}, "devDependencies": {"typescript": "5"}}',
+        "backend/pyproject.toml": '[project]\nname = "x"\ndependencies = ["fastapi==0.1", "pydantic>=2", "httpx"]\n',
+        "backend/requirements.txt": "# deps\nuvicorn[standard]==0.3\n-r other.txt\n",
+        "Dockerfile": "FROM python",
+        ".github/workflows/ci.yml": "on: push",
+        "backend/app/main.py": "",
+        "tests/main.py": "",
+        "app/page.tsx": "",
+    }
+    d = detect(texts)
+    assert d["stack"][:2] == ["Next.js", "React"]
+    assert {"FastAPI", "Pydantic", "HTTPX", "Uvicorn", "TypeScript"} <= set(d["stack"])
+    assert d["tools"] == ["Docker", "GitHub Actions"]
+    assert "backend/app/main.py" in d["entries"] and "tests/main.py" not in d["entries"]

@@ -15,6 +15,9 @@ export type Snapshot = {
   languages: { lang: string; files: number; loc: number }[];
   totals: { files: number; loc: number; edges: number };
   skipped_files: number;
+  stack?: string[];
+  tools?: string[];
+  entries?: string[];
   cached?: boolean;
 };
 

@@ -10,6 +10,7 @@ import type { Box } from "@/lib/layout";
 import Diagram from "./Diagram";
 import { ArrowUp, ChevronLeft, Close, External, Logo, Sparkle, Star } from "./Icons";
 import Markdown from "./Markdown";
+import ThemeToggle from "./ThemeToggle";
 
 type Step = { name: string; args: Record<string, unknown>; files: string[] };
 type Msg = { role: "user"; content: string } | { role: "assistant"; content: string; files: string[]; steps: Step[]; error?: boolean };
@@ -235,6 +236,9 @@ export default function Atlas({ slug }: { slug: string }) {
             <Star size={12} /> {shortNumber(snapshot.stars || 0)} · {shortNumber(snapshot.totals.files)} files · {shortNumber(snapshot.totals.loc)} lines
           </span>
         </div>
+        <div className="topbar-end">
+          <ThemeToggle />
+        </div>
       </header>
 
       <main className="canvas">
@@ -304,6 +308,7 @@ export default function Atlas({ slug }: { slug: string }) {
                     Start with <strong>{explain.start}</strong>
                   </button>
                 )}
+                {!level.path && <RepoFacts snapshot={snapshot} onShow={showPath} />}
                 {level.links.length > 0 && (
                   <>
                     <h3>How the parts connect</h3>
@@ -525,4 +530,53 @@ function describeStep(s: Step): string {
   if (s.name === "read_file") return `Read ${a.path ?? "a file"}`;
   if (s.name === "list_dir") return `Looked in ${a.path || "the root folder"}`;
   return s.name;
+}
+
+function RepoFacts({ snapshot, onShow }: { snapshot: Snapshot; onShow: (p: string) => void }) {
+  const built = [...(snapshot.stack || []), ...(snapshot.tools || [])];
+  const langs = snapshot.languages.filter((l) => l.loc > 0);
+  const total = langs.reduce((a, l) => a + l.loc, 0) || 1;
+  const major = langs.filter((l) => l.loc / total >= 0.03).slice(0, 5);
+  return (
+    <>
+      {built.length > 0 && (
+        <>
+          <h3>Built with</h3>
+          <div className="chips">
+            {built.map((b) => (
+              <span key={b} className="chip">
+                {b}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+      <h3>Languages</h3>
+      <div className="lang-split">
+        {major.map((l) => (
+          <i key={l.lang} style={{ width: `${(l.loc / total) * 100}%`, background: langColor(l.lang) }} />
+        ))}
+      </div>
+      <ul className="lang-legend">
+        {major.map((l) => (
+          <li key={l.lang}>
+            <i style={{ background: langColor(l.lang) }} />
+            {l.lang} <span>{Math.round((l.loc / total) * 100)}%</span>
+          </li>
+        ))}
+      </ul>
+      {(snapshot.entries || []).length > 0 && (
+        <>
+          <h3>Where it starts</h3>
+          <div className="chips">
+            {snapshot.entries!.map((e) => (
+              <button key={e} className="path-chip" onClick={() => onShow(e)} title="Show it in the diagram">
+                {e}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
 }

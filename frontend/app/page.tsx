@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { ArrowRight, Logo } from "@/components/Icons";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const EXAMPLES = ["pallets/flask", "expressjs/express", "gin-gonic/gin", "fastapi/fastapi", "porouscoin/break-my-agent"];
 
@@ -32,9 +33,12 @@ export default function Home() {
   return (
     <main className="home">
       <div className="home-inner">
-        <div className="home-brand">
-          <Logo size={34} />
-          <span>Repo Atlas</span>
+        <div className="home-top">
+          <div className="home-brand">
+            <Logo size={34} />
+            <span>Repo Atlas</span>
+          </div>
+          <ThemeToggle />
         </div>
         <h1>Understand any codebase in a minute.</h1>
         <p className="home-sub">

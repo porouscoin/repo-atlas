@@ -18,39 +18,9 @@ export const Sparkle = ({ size }: P) => (
     <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" />
   </svg>
 );
-export const Route = ({ size }: P) => (
-  <svg {...base(size)}>
-    <circle cx="6" cy="19" r="2" />
-    <circle cx="18" cy="5" r="2" />
-    <path d="M8 19h8.5a3.5 3.5 0 0 0 0-7h-9a3.5 3.5 0 0 1 0-7H16" />
-  </svg>
-);
-export const Clock = ({ size }: P) => (
-  <svg {...base(size)}>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 7v5l3 2" />
-  </svg>
-);
 export const Close = ({ size }: P) => (
   <svg {...base(size)}>
     <path d="M6 6l12 12M18 6L6 18" />
-  </svg>
-);
-export const Play = ({ size }: P) => (
-  <svg {...base(size)} fill="currentColor" stroke="none">
-    <path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" />
-  </svg>
-);
-export const Pause = ({ size }: P) => (
-  <svg {...base(size)} fill="currentColor" stroke="none">
-    <rect x="6" y="5" width="4" height="14" rx="1" />
-    <rect x="14" y="5" width="4" height="14" rx="1" />
-  </svg>
-);
-export const Search = ({ size }: P) => (
-  <svg {...base(size)}>
-    <circle cx="11" cy="11" r="7" />
-    <path d="M20 20l-3.5-3.5" />
   </svg>
 );
 export const Star = ({ size }: P) => (
@@ -73,30 +43,21 @@ export const ChevronLeft = ({ size }: P) => (
     <path d="M15 18l-6-6 6-6" />
   </svg>
 );
-export const ChevronRight = ({ size }: P) => (
-  <svg {...base(size)}>
-    <path d="M9 18l6-6-6-6" />
-  </svg>
-);
-export const Focus = ({ size }: P) => (
-  <svg {...base(size)}>
-    <path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4" />
-  </svg>
-);
 export const External = ({ size }: P) => (
   <svg {...base(size)}>
     <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
   </svg>
 );
-export const FileIcon = ({ size }: P) => (
+export const Sun = ({ size }: P) => (
   <svg {...base(size)}>
-    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-    <path d="M14 3v5h5" />
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
   </svg>
 );
-export const FolderIcon = ({ size }: P) => (
+
+export const Moon = ({ size }: P) => (
   <svg {...base(size)}>
-    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
   </svg>
 );
 
