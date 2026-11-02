@@ -15,8 +15,16 @@ function inline(text: string, code?: CodeFn): ReactNode[] {
   while ((m = re.exec(text))) {
     if (m.index > last) out.push(text.slice(last, m.index));
     const t = m[0];
-    if (t.startsWith("**")) out.push(<strong key={m.index}>{t.slice(2, -2)}</strong>);
-    else if (t.startsWith("`")) out.push(code ? code(t.slice(1, -1), m.index) : <code key={m.index}>{t.slice(1, -1)}</code>);
+    if (t.startsWith("**"))
+      out.push(<strong key={m.index}>{t.slice(2, -2)}</strong>);
+    else if (t.startsWith("`"))
+      out.push(
+        code ? (
+          code(t.slice(1, -1), m.index)
+        ) : (
+          <code key={m.index}>{t.slice(1, -1)}</code>
+        ),
+      );
     else out.push(<em key={m.index}>{t.slice(1, -1)}</em>);
     last = m.index + t.length;
   }
@@ -27,7 +35,13 @@ function inline(text: string, code?: CodeFn): ReactNode[] {
 const BULLET = /^\s*[-*•]\s+/;
 const NUMBER = /^\s*\d+[.)]\s+/;
 
-export default function Markdown({ text, code }: { text: string; code?: CodeFn }) {
+export default function Markdown({
+  text,
+  code,
+}: {
+  text: string;
+  code?: CodeFn;
+}) {
   const lines = text.replace(/\r/g, "").split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
@@ -41,7 +55,8 @@ export default function Markdown({ text, code }: { text: string; code?: CodeFn }
       const ordered = NUMBER.test(line);
       const pattern = ordered ? NUMBER : BULLET;
       const items: string[] = [];
-      while (i < lines.length && pattern.test(lines[i])) items.push(lines[i++].replace(pattern, ""));
+      while (i < lines.length && pattern.test(lines[i]))
+        items.push(lines[i++].replace(pattern, ""));
       const List = ordered ? "ol" : "ul";
       blocks.push(
         <List key={i}>
@@ -54,12 +69,23 @@ export default function Markdown({ text, code }: { text: string; code?: CodeFn }
     }
     const heading = line.match(/^#{1,4}\s+(.*)/);
     if (heading) {
-      blocks.push(<p key={i} className="md-h">{inline(heading[1], code)}</p>);
+      blocks.push(
+        <p key={i} className="md-h">
+          {inline(heading[1], code)}
+        </p>,
+      );
       i++;
       continue;
     }
     const para: string[] = [];
-    while (i < lines.length && lines[i].trim() && !BULLET.test(lines[i]) && !NUMBER.test(lines[i]) && !/^#{1,4}\s/.test(lines[i])) para.push(lines[i++]);
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !BULLET.test(lines[i]) &&
+      !NUMBER.test(lines[i]) &&
+      !/^#{1,4}\s/.test(lines[i])
+    )
+      para.push(lines[i++]);
     blocks.push(
       <p key={i}>
         {para.map((p, j) => (

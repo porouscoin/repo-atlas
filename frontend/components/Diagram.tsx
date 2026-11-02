@@ -24,7 +24,11 @@ type Props = {
   lit: Set<number> | null; // boxes the AI pointed at
   impact: Map<number, number> | null; // box -> how many of its files depend on the selected box
   link: Link | null; // the arrow whose proof is open
-  growth?: Map<number, { lines: number; files: number; grew: boolean }> | null; // sizes at a point in history
+  growth?: Map<
+    number,
+    { lines: number; files: number; grew: boolean; color?: string }
+  > | null; // sizes at a point in history
+  onHoverBox?: (k: number | null) => void; // set while history plays, so the river can follow
   onOpen: (b: Box, k: number) => void;
   onLink: (l: Link) => void;
 };
@@ -45,6 +49,7 @@ export default function Diagram({
   impact,
   link,
   growth,
+  onHoverBox,
   onOpen,
   onLink,
 }: Props) {
@@ -225,8 +230,10 @@ export default function Diagram({
                   width: CARD_W,
                   height: CARD_H,
                 }}
-                onMouseEnter={() => setHover(k)}
-                onMouseLeave={() => setHover(null)}
+                onMouseEnter={() => (onHoverBox ? onHoverBox(k) : setHover(k))}
+                onMouseLeave={() =>
+                  onHoverBox ? onHoverBox(null) : setHover(null)
+                }
                 onClick={() => onOpen(b, k)}
               >
                 <div className="card-top">
@@ -276,6 +283,7 @@ export default function Diagram({
                     className="grow-bar"
                     style={{
                       width: `${Math.min(100, (g.lines / Math.max(1, b.loc)) * 100)}%`,
+                      background: g.color,
                     }}
                   />
                 )}

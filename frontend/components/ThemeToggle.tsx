@@ -12,7 +12,9 @@ export default function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>("dark");
 
   useEffect(() => {
-    setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+    setTheme(
+      document.documentElement.dataset.theme === "light" ? "light" : "dark",
+    );
   }, []);
 
   const flip = () => {
@@ -28,7 +30,9 @@ export default function ThemeToggle() {
     <button
       className="theme-toggle"
       onClick={flip}
-      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label={
+        theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+      }
       title={theme === "dark" ? "Light mode" : "Dark mode"}
     >
       {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}

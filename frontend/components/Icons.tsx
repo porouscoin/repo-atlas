@@ -64,11 +64,41 @@ export const Moon = ({ size }: P) => (
 export function Logo({ size = 22 }: P) {
   // Three boxes joined by right-angle connectors: a tiny version of the diagram.
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden className="logo">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      aria-hidden
+      className="logo"
+    >
       <rect x="10" y="3" width="12" height="8" rx="1.5" fill="var(--accent)" />
-      <path d="M16 11v5H7.5v5M16 16h8.5v5" fill="none" stroke="var(--text-2)" strokeWidth="1.8" strokeLinejoin="round" />
-      <rect x="2.5" y="21" width="10" height="8" rx="1.5" fill="none" stroke="var(--text)" strokeWidth="1.8" />
-      <rect x="19.5" y="21" width="10" height="8" rx="1.5" fill="none" stroke="var(--text)" strokeWidth="1.8" />
+      <path
+        d="M16 11v5H7.5v5M16 16h8.5v5"
+        fill="none"
+        stroke="var(--text-2)"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <rect
+        x="2.5"
+        y="21"
+        width="10"
+        height="8"
+        rx="1.5"
+        fill="none"
+        stroke="var(--text)"
+        strokeWidth="1.8"
+      />
+      <rect
+        x="19.5"
+        y="21"
+        width="10"
+        height="8"
+        rx="1.5"
+        fill="none"
+        stroke="var(--text)"
+        strokeWidth="1.8"
+      />
     </svg>
   );
 }

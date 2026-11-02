@@ -36,7 +36,7 @@ import {
   Logo,
   Star,
 } from "./Icons";
-import TimelineBar, { month } from "./TimelineBar";
+import TimelineBar, { lerp, month, riverBands } from "./TimelineBar";
 import Markdown from "./Markdown";
 import ThemeToggle from "./ThemeToggle";
 
@@ -90,6 +90,7 @@ export default function Atlas({ slug }: { slug: string }) {
   const [tlError, setTlError] = useState("");
   const [frame, setFrame] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [band, setBand] = useState<number | null>(null); // box hovered in the river or the diagram
   const chatEnd = useRef<HTMLDivElement>(null);
 
   // --------------------------------------------------------------- loading
@@ -166,42 +167,61 @@ export default function Atlas({ slug }: { slug: string }) {
     };
   }, [history, snapshot, level]);
 
+  // Smooth playback: the whole history takes about 14 seconds, whatever its length.
   useEffect(() => {
     if (!playing || !tl) return;
     const last = tl.frames.length - 1;
-    const t = setInterval(() => {
+    let raf = 0;
+    let prev = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(100, now - prev);
+      prev = now;
+      let done = false;
       setFrame((f) => {
-        if (f >= last) {
-          setPlaying(false);
-          return f;
+        const next = f + (dt / 14000) * last;
+        if (next >= last) {
+          done = true;
+          return last;
         }
-        return f + 1;
+        return next;
       });
-    }, 750);
-    return () => clearInterval(t);
+      if (done) setPlaying(false);
+      else raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [playing, tl]);
+
+  const colors = useMemo(() => {
+    const m = new Map<number, string>();
+    if (tl && level)
+      for (const b of riverBands(level.boxes, tl)) m.set(b.k, b.color);
+    return m;
+  }, [tl, level]);
 
   const growth = useMemo(() => {
     if (!history || !tl || !level) return null;
     const m = new Map<
       number,
-      { lines: number; files: number; grew: boolean }
+      { lines: number; files: number; grew: boolean; color?: string }
     >();
+    const i = Math.floor(frame);
     level.boxes.forEach((b, k) => {
       const s = tl.boxes[b.id];
       if (!s) return;
-      const lines = s.lines[frame] ?? 0;
+      const lines = s.lines[i] ? Math.round(lerp(s.lines, frame)) : 0;
       m.set(k, {
         lines,
-        files: s.files[frame] ?? 0,
-        // a real step up, not a one-line fix
+        files: s.files[Math.round(frame)] ?? 0,
+        // growing right now by a real step, not a one-line fix
         grew:
-          frame > 0 &&
-          lines - (s.lines[frame - 1] ?? 0) > Math.max(20, b.loc * 0.03),
+          i + 1 < s.lines.length &&
+          s.lines[i + 1] - s.lines[i] > Math.max(20, b.loc * 0.03),
+        color: colors.get(k),
       });
     });
     return m.size ? m : null;
-  }, [history, tl, level, frame]);
+  }, [history, tl, level, frame, colors]);
 
   const toggleHistory = () => {
     if (history) {
@@ -493,7 +513,8 @@ export default function Atlas({ slug }: { slug: string }) {
             roles={explain?.boxes ?? (explainError ? {} : null)}
             start={explain?.start ?? ""}
             selected={selected}
-            lit={lit}
+            lit={history ? (band !== null ? new Set([band]) : null) : lit}
+            onHoverBox={history ? setBand : undefined}
             impact={!history && blast?.perBox.size ? blast.perBox : null}
             growth={growth}
             link={arrow}
@@ -505,9 +526,12 @@ export default function Atlas({ slug }: { slug: string }) {
           (tl ? (
             <TimelineBar
               data={tl}
-              frame={frame}
+              boxes={level?.boxes ?? []}
+              t={frame}
               playing={playing}
-              onFrame={(f) => {
+              hover={band}
+              onHover={setBand}
+              onSeek={(f) => {
                 setPlaying(false);
                 setFrame(f);
               }}
@@ -552,7 +576,8 @@ export default function Atlas({ slug }: { slug: string }) {
             <HistoryPanel
               tl={tl}
               level={level}
-              frame={frame}
+              frame={Math.round(frame)}
+              colors={colors}
               onFrame={(f) => {
                 setPlaying(false);
                 setFrame(f);
@@ -1084,8 +1109,10 @@ function HistoryPanel({
   tl,
   level,
   frame,
+  colors,
   onFrame,
 }: {
+  colors: Map<number, string>;
   tl: Timeline | null;
   level: import("@/lib/api").Level;
   frame: number;
@@ -1096,8 +1123,9 @@ function HistoryPanel({
   const first = fr[0];
   const now = fr[fr.length - 1];
   const born = level.boxes
-    .map((b) => ({
+    .map((b, k) => ({
       b,
+      k,
       at: tl.boxes[b.id]?.lines.findIndex((v) => v > 0) ?? -1,
     }))
     .filter((x) => x.at >= 0)
@@ -1136,13 +1164,16 @@ function HistoryPanel({
       </dl>
       <h3>When each part appeared</h3>
       <ul className="file-list">
-        {born.map(({ b, at }) => (
+        {born.map(({ b, k, at }) => (
           <li key={b.id}>
             <button
               className={at <= frame ? "" : "later"}
               onClick={() => onFrame(at)}
             >
-              <span>{b.kind === "folder" ? b.name + "/" : b.name}</span>
+              <span>
+                <i className="swatch" style={{ background: colors.get(k) }} />
+                {b.kind === "folder" ? b.name + "/" : b.name}
+              </span>
               <em>{at === 0 ? "from the start" : month(fr[at].date)}</em>
             </button>
           </li>
