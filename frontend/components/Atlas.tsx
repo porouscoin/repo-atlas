@@ -3,20 +3,46 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ask, fetchExplain, fetchLevel, fetchRepo, fetchSummary, type AskEvent, type Explain, type Level, type Snapshot } from "@/lib/api";
-import { langColor } from "@/lib/colors";
+import {
+  ask,
+  fetchExplain,
+  fetchLevel,
+  fetchRepo,
+  fetchSummary,
+  type AskEvent,
+  type Explain,
+  type Level,
+  type Snapshot,
+} from "@/lib/api";
 import { buildGraph, shortNumber } from "@/lib/graph";
 import type { Box } from "@/lib/layout";
 import Diagram from "./Diagram";
-import { ArrowUp, ChevronLeft, Close, External, Logo, Sparkle, Star } from "./Icons";
+import { ArrowUp, ChevronLeft, Close, External, Logo, Star } from "./Icons";
 import Markdown from "./Markdown";
 import ThemeToggle from "./ThemeToggle";
 
 type Step = { name: string; args: Record<string, unknown>; files: string[] };
-type Msg = { role: "user"; content: string } | { role: "assistant"; content: string; files: string[]; steps: Step[]; error?: boolean };
+type Msg =
+  | { role: "user"; content: string }
+  | {
+      role: "assistant";
+      content: string;
+      files: string[];
+      steps: Step[];
+      error?: boolean;
+    };
 
-const STAGES = ["Finding the repo", "Downloading the code", "Reading the imports", "Drawing the diagram"];
-const SUGGESTIONS = ["Where does the app start?", "How do the main parts work together?", "Where would I add a new feature?"];
+const STAGES = [
+  "Finding the repo",
+  "Downloading the code",
+  "Reading the imports",
+  "Drawing the diagram",
+];
+const SUGGESTIONS = [
+  "Where does the app start?",
+  "How do the main parts work together?",
+  "Where would I add a new feature?",
+];
 
 function readPath(): string {
   if (typeof window === "undefined") return "";
@@ -49,7 +75,10 @@ export default function Atlas({ slug }: { slug: string }) {
     setError("");
     setStage(0);
     setPath(readPath());
-    const timer = setInterval(() => setStage((s) => Math.min(s + 1, STAGES.length - 1)), 1500);
+    const timer = setInterval(
+      () => setStage((s) => Math.min(s + 1, STAGES.length - 1)),
+      1500,
+    );
     fetchRepo(slug)
       .then((s) => alive && setSnapshot(s))
       .catch((e) => alive && setError(e.message))
@@ -60,7 +89,10 @@ export default function Atlas({ slug }: { slug: string }) {
     };
   }, [slug]);
 
-  const graph = useMemo(() => (snapshot ? buildGraph(snapshot) : null), [snapshot]);
+  const graph = useMemo(
+    () => (snapshot ? buildGraph(snapshot) : null),
+    [snapshot],
+  );
 
   useEffect(() => {
     if (!snapshot) return;
@@ -108,7 +140,9 @@ export default function Atlas({ slug }: { slug: string }) {
       setSummaries((s) => ({ ...s, [filePath]: "" }));
       fetchSummary(snapshot.slug, snapshot.sha, filePath)
         .then((text) => setSummaries((s) => ({ ...s, [filePath]: text })))
-        .catch(() => setSummaries((s) => ({ ...s, [filePath]: "No summary right now." })));
+        .catch(() =>
+          setSummaries((s) => ({ ...s, [filePath]: "No summary right now." })),
+        );
     },
     [snapshot, summaries],
   );
@@ -131,7 +165,15 @@ export default function Atlas({ slug }: { slug: string }) {
       const members = new Set(b.files);
       for (const p of litPaths) {
         const i = graph.index.get(p);
-        if (i !== undefined ? members.has(i) : b.target && (b.target === p || b.target.startsWith(p) || p.startsWith(b.target))) s.add(k);
+        if (
+          i !== undefined
+            ? members.has(i)
+            : b.target &&
+              (b.target === p ||
+                b.target.startsWith(p) ||
+                p.startsWith(b.target))
+        )
+          s.add(k);
       }
     });
     return s.size ? s : null;
@@ -142,10 +184,18 @@ export default function Atlas({ slug }: { slug: string }) {
   const send = async (question: string) => {
     if (!snapshot || busy || question.trim().length < 2) return;
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
-    setMessages((m) => [...m, { role: "user", content: question }, { role: "assistant", content: "", files: [], steps: [] }]);
+    setMessages((m) => [
+      ...m,
+      { role: "user", content: question },
+      { role: "assistant", content: "", files: [], steps: [] },
+    ]);
     setDraft("");
     setBusy(true);
-    const update = (fn: (m: Extract<Msg, { role: "assistant" }>) => Extract<Msg, { role: "assistant" }>) =>
+    const update = (
+      fn: (
+        m: Extract<Msg, { role: "assistant" }>,
+      ) => Extract<Msg, { role: "assistant" }>,
+    ) =>
       setMessages((all) => {
         const copy = [...all];
         const last = copy[copy.length - 1];
@@ -153,13 +203,26 @@ export default function Atlas({ slug }: { slug: string }) {
         return copy;
       });
     try {
-      await ask(snapshot.slug, snapshot.sha, question, history, (e: AskEvent) => {
-        if (e.type === "tool") update((m) => ({ ...m, steps: [...m.steps, { name: e.name, args: e.args, files: e.files }] }));
-        else if (e.type === "answer") {
-          update((m) => ({ ...m, content: e.text, files: e.files }));
-          setLitPaths(e.files.length ? e.files : null);
-        } else update((m) => ({ ...m, content: e.message, error: true }));
-      });
+      await ask(
+        snapshot.slug,
+        snapshot.sha,
+        question,
+        history,
+        (e: AskEvent) => {
+          if (e.type === "tool")
+            update((m) => ({
+              ...m,
+              steps: [
+                ...m.steps,
+                { name: e.name, args: e.args, files: e.files },
+              ],
+            }));
+          else if (e.type === "answer") {
+            update((m) => ({ ...m, content: e.text, files: e.files }));
+            setLitPaths(e.files.length ? e.files : null);
+          } else update((m) => ({ ...m, content: e.message, error: true }));
+        },
+      );
     } catch (err) {
       update((m) => ({ ...m, content: (err as Error).message, error: true }));
     } finally {
@@ -167,12 +230,19 @@ export default function Atlas({ slug }: { slug: string }) {
     }
   };
 
-  useEffect(() => chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" }), [messages]);
+  useEffect(
+    () => chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" }),
+    [messages],
+  );
 
   // Jump to the folder that holds a path and select it there.
   const showPath = (p: string) => {
     if (!snapshot) return;
-    const folder = p.endsWith("/") ? p : p.includes("/") ? p.slice(0, p.lastIndexOf("/") + 1) : "";
+    const folder = p.endsWith("/")
+      ? p
+      : p.includes("/")
+        ? p.slice(0, p.lastIndexOf("/") + 1)
+        : "";
     setLitPaths([p]);
     if (folder !== level?.path) go(folder);
   };
@@ -182,11 +252,20 @@ export default function Atlas({ slug }: { slug: string }) {
     const clean = code.replace(/^\.\//, "").replace(/:\d+(-\d+)?$/, "");
     const hit = graph.index.has(clean)
       ? clean
-      : snapshot.files.find((f) => f.path.endsWith("/" + clean))?.path ??
-        (snapshot.files.some((f) => f.path.startsWith(clean.replace(/\/?$/, "/"))) ? clean.replace(/\/?$/, "/") : null);
+      : (snapshot.files.find((f) => f.path.endsWith("/" + clean))?.path ??
+        (snapshot.files.some((f) =>
+          f.path.startsWith(clean.replace(/\/?$/, "/")),
+        )
+          ? clean.replace(/\/?$/, "/")
+          : null));
     if (!hit) return <code key={key}>{code}</code>;
     return (
-      <button key={key} className="path-chip" onClick={() => showPath(hit)} title="Show it in the diagram">
+      <button
+        key={key}
+        className="path-chip"
+        onClick={() => showPath(hit)}
+        title="Show it in the diagram"
+      >
         {code}
       </button>
     );
@@ -229,11 +308,18 @@ export default function Atlas({ slug }: { slug: string }) {
           <span>Repo Atlas</span>
         </Link>
         <div className="repo-meta">
-          <a href={github} target="_blank" rel="noreferrer" className="repo-name">
+          <a
+            href={github}
+            target="_blank"
+            rel="noreferrer"
+            className="repo-name"
+          >
             {snapshot.slug}
           </a>
           <span className="repo-stats">
-            <Star size={12} /> {shortNumber(snapshot.stars || 0)} · {shortNumber(snapshot.totals.files)} files · {shortNumber(snapshot.totals.loc)} lines
+            <Star size={12} /> {shortNumber(snapshot.stars || 0)} ·{" "}
+            {shortNumber(snapshot.totals.files)} files ·{" "}
+            {shortNumber(snapshot.totals.loc)} lines
           </span>
         </div>
         <div className="topbar-end">
@@ -247,7 +333,11 @@ export default function Atlas({ slug }: { slug: string }) {
             {level.crumbs.map((c, k) => (
               <span key={c.path}>
                 {k > 0 && <span className="sep">/</span>}
-                {k < level.crumbs.length - 1 ? <button onClick={() => go(c.path)}>{c.name}</button> : <strong>{c.name}</strong>}
+                {k < level.crumbs.length - 1 ? (
+                  <button onClick={() => go(c.path)}>{c.name}</button>
+                ) : (
+                  <strong>{c.name}</strong>
+                )}
               </span>
             ))}
           </nav>
@@ -267,18 +357,25 @@ export default function Atlas({ slug }: { slug: string }) {
         )}
         {level && (
           <p className="hint">
-            Arrows point from a part to the parts it uses. Click a box for details, click a folder again to open it.
+            Arrows point from a part to the parts it uses. Click a box for
+            details, click a folder again to open it.
           </p>
         )}
       </main>
 
       <aside className="side">
         <div className="tabs" role="tablist">
-          <button className={tab === "explain" ? "on" : ""} onClick={() => setTab("explain")}>
+          <button
+            className={tab === "explain" ? "on" : ""}
+            onClick={() => setTab("explain")}
+          >
             Explain
           </button>
-          <button className={tab === "ask" ? "on" : ""} onClick={() => setTab("ask")}>
-            <Sparkle size={14} /> Ask
+          <button
+            className={tab === "ask" ? "on" : ""}
+            onClick={() => setTab("ask")}
+          >
+            Ask
           </button>
         </div>
 
@@ -288,35 +385,49 @@ export default function Atlas({ slug }: { slug: string }) {
               <>
                 <h2>{level.path ? here?.name + "/" : "What this repo is"}</h2>
                 <p className="muted">
-                  {level.boxes.length} parts · {shortNumber(level.boxes.reduce((a, b) => a + b.files.length, 0))} files
+                  {level.boxes.length} parts ·{" "}
+                  {shortNumber(
+                    level.boxes.reduce((a, b) => a + b.files.length, 0),
+                  )}{" "}
+                  files
                 </p>
                 {explain ? (
                   <p className="summary">{explain.summary}</p>
                 ) : explainError ? (
                   <p className="summary muted">{explainError}</p>
                 ) : (
-                  <p className="summary loading">Reading the code to explain it…</p>
+                  <p className="summary loading">
+                    Reading the code to explain it…
+                  </p>
                 )}
                 {explain?.start && (
                   <button
                     className="start-chip"
                     onClick={() => {
-                      const k = level.boxes.findIndex((b) => b.name === explain.start);
+                      const k = level.boxes.findIndex(
+                        (b) => b.name === explain.start,
+                      );
                       if (k >= 0) open(level.boxes[k], k);
                     }}
                   >
-                    Start with <strong>{explain.start}</strong>
+                    Start reading at <strong>{explain.start}</strong> →
                   </button>
                 )}
-                {!level.path && <RepoFacts snapshot={snapshot} onShow={showPath} />}
+                {!level.path && (
+                  <RepoFacts snapshot={snapshot} onShow={showPath} />
+                )}
                 {level.links.length > 0 && (
                   <>
                     <h3>How the parts connect</h3>
                     <ul className="flows">
                       {level.links.slice(0, 6).map((l, k) => (
                         <li key={k}>
-                          <strong>{level.boxes[l.from].name}</strong> uses <strong>{level.boxes[l.to].name}</strong>
-                          <span> · {l.count} import{l.count === 1 ? "" : "s"}</span>
+                          <strong>{level.boxes[l.from].name}</strong> uses{" "}
+                          <strong>{level.boxes[l.to].name}</strong>
+                          <span>
+                            {" "}
+                            · {l.count} import{l.count === 1 ? "" : "s"}
+                          </span>
                         </li>
                       ))}
                     </ul>
@@ -327,10 +438,14 @@ export default function Atlas({ slug }: { slug: string }) {
                   {level.boxes.map((b, k) => (
                     <li key={b.id}>
                       <button onClick={() => open(b, k)}>
-                        <i style={{ background: langColor(b.langs[0]?.lang || "Other") }} />
                         <span>
-                          <strong>{b.kind === "folder" ? b.name + "/" : b.name}</strong>
-                          <em>{explain?.boxes[b.name] || `${b.files.length} files`}</em>
+                          <strong>
+                            {b.kind === "folder" ? b.name + "/" : b.name}
+                          </strong>
+                          <em>
+                            {explain?.boxes[b.name] ||
+                              `${b.files.length} files`}
+                          </em>
                         </span>
                       </button>
                     </li>
@@ -343,7 +458,9 @@ export default function Atlas({ slug }: { slug: string }) {
                 snapshot={snapshot}
                 graph={graph}
                 role={explain?.boxes[box.name]}
-                summary={box.kind === "file" ? summaries[box.target] : undefined}
+                summary={
+                  box.kind === "file" ? summaries[box.target] : undefined
+                }
                 github={github}
                 onBack={() => setSelected(null)}
                 onOpenFolder={() => go(box.target)}
@@ -358,7 +475,10 @@ export default function Atlas({ slug }: { slug: string }) {
             <div className="side-body chat">
               {messages.length === 0 && (
                 <div className="suggest">
-                  <p className="muted">Ask anything about this repo. The AI reads the code to answer and highlights the parts it talks about.</p>
+                  <p className="muted">
+                    Ask anything about this repo. The AI reads the code to
+                    answer and highlights the parts it talks about.
+                  </p>
                   {SUGGESTIONS.map((s) => (
                     <button key={s} onClick={() => send(s)}>
                       {s}
@@ -413,7 +533,11 @@ export default function Atlas({ slug }: { slug: string }) {
                   }
                 }}
               />
-              <button type="submit" disabled={busy || draft.trim().length < 2} aria-label="Send">
+              <button
+                type="submit"
+                disabled={busy || draft.trim().length < 2}
+                aria-label="Send"
+              >
                 <ArrowUp size={16} />
               </button>
             </form>
@@ -446,7 +570,9 @@ function BoxDetails({
   onShow: (p: string) => void;
 }) {
   const files = snapshot.files;
-  const biggest = [...box.files].sort((a, b) => files[b].loc - files[a].loc).slice(0, 8);
+  const biggest = [...box.files]
+    .sort((a, b) => files[b].loc - files[a].loc)
+    .slice(0, 8);
   const fileIdx = box.kind === "file" ? box.files[0] : null;
   return (
     <>
@@ -455,11 +581,15 @@ function BoxDetails({
       </button>
       <h2>{box.kind === "folder" ? box.name + "/" : box.name}</h2>
       <p className="muted">
-        {box.files.length === 1 ? "1 file" : `${box.files.length} files`} · {box.loc.toLocaleString()} lines
-        {box.langs.length > 0 && " · " + box.langs.map((l) => l.lang).join(", ")}
+        {box.files.length === 1 ? "1 file" : `${box.files.length} files`} ·{" "}
+        {box.loc.toLocaleString()} lines
+        {box.langs.length > 0 &&
+          " · " + box.langs.map((l) => l.lang).join(", ")}
       </p>
       {box.kind === "file" ? (
-        <p className={`summary ${summary ? "" : "loading"}`}>{summary || "Reading the file…"}</p>
+        <p className={`summary ${summary ? "" : "loading"}`}>
+          {summary || "Reading the file…"}
+        </p>
       ) : (
         role && <p className="summary">{role}</p>
       )}
@@ -472,9 +602,24 @@ function BoxDetails({
 
       {fileIdx !== null ? (
         <>
-          <FileList title="Uses" items={graph.imports[fileIdx]} snapshot={snapshot} onShow={onShow} />
-          <FileList title="Used by" items={graph.importers[fileIdx]} snapshot={snapshot} onShow={onShow} />
-          <a className="btn wide" href={`${github}/blob/${snapshot.sha}/${box.target}`} target="_blank" rel="noreferrer">
+          <FileList
+            title="Uses"
+            items={graph.imports[fileIdx]}
+            snapshot={snapshot}
+            onShow={onShow}
+          />
+          <FileList
+            title="Used by"
+            items={graph.importers[fileIdx]}
+            snapshot={snapshot}
+            onShow={onShow}
+          />
+          <a
+            className="btn wide"
+            href={`${github}/blob/${snapshot.sha}/${box.target}`}
+            target="_blank"
+            rel="noreferrer"
+          >
             <External size={14} /> Open on GitHub
           </a>
         </>
@@ -485,7 +630,11 @@ function BoxDetails({
             {biggest.map((i) => (
               <li key={i}>
                 <button onClick={() => onShow(files[i].path)}>
-                  <span title={files[i].path}>{box.target && files[i].path.startsWith(box.target) ? files[i].path.slice(box.target.length) : files[i].path}</span>
+                  <span title={files[i].path}>
+                    {box.target && files[i].path.startsWith(box.target)
+                      ? files[i].path.slice(box.target.length)
+                      : files[i].path}
+                  </span>
                   <em>{shortNumber(files[i].loc)}</em>
                 </button>
               </li>
@@ -493,8 +642,8 @@ function BoxDetails({
           </ul>
           {(box.used_from_outside > 0 || box.uses_outside > 0) && (
             <p className="muted small">
-              Outside this folder: used by {box.used_from_outside} import{box.used_from_outside === 1 ? "" : "s"}, uses{" "}
-              {box.uses_outside}.
+              Outside this folder: used by {box.used_from_outside} import
+              {box.used_from_outside === 1 ? "" : "s"}, uses {box.uses_outside}.
             </p>
           )}
         </>
@@ -503,7 +652,17 @@ function BoxDetails({
   );
 }
 
-function FileList({ title, items, snapshot, onShow }: { title: string; items: number[]; snapshot: Snapshot; onShow: (p: string) => void }) {
+function FileList({
+  title,
+  items,
+  snapshot,
+  onShow,
+}: {
+  title: string;
+  items: number[];
+  snapshot: Snapshot;
+  onShow: (p: string) => void;
+}) {
   if (!items.length) return null;
   return (
     <>
@@ -513,12 +672,17 @@ function FileList({ title, items, snapshot, onShow }: { title: string; items: nu
       <ul className="file-list">
         {items.slice(0, 10).map((i) => (
           <li key={i}>
-            <button onClick={() => onShow(snapshot.files[i].path)} title={snapshot.files[i].path}>
+            <button
+              onClick={() => onShow(snapshot.files[i].path)}
+              title={snapshot.files[i].path}
+            >
               <span>{snapshot.files[i].path}</span>
             </button>
           </li>
         ))}
-        {items.length > 10 && <li className="more">and {items.length - 10} more</li>}
+        {items.length > 10 && (
+          <li className="more">and {items.length - 10} more</li>
+        )}
       </ul>
     </>
   );
@@ -532,51 +696,49 @@ function describeStep(s: Step): string {
   return s.name;
 }
 
-function RepoFacts({ snapshot, onShow }: { snapshot: Snapshot; onShow: (p: string) => void }) {
+function RepoFacts({
+  snapshot,
+  onShow,
+}: {
+  snapshot: Snapshot;
+  onShow: (p: string) => void;
+}) {
   const built = [...(snapshot.stack || []), ...(snapshot.tools || [])];
   const langs = snapshot.languages.filter((l) => l.loc > 0);
   const total = langs.reduce((a, l) => a + l.loc, 0) || 1;
-  const major = langs.filter((l) => l.loc / total >= 0.03).slice(0, 5);
+  const major = langs.filter((l) => l.loc / total >= 0.03).slice(0, 4);
+  const entries = snapshot.entries || [];
   return (
-    <>
+    <dl className="facts">
       {built.length > 0 && (
         <>
-          <h3>Built with</h3>
-          <div className="chips">
-            {built.map((b) => (
-              <span key={b} className="chip">
-                {b}
-              </span>
-            ))}
-          </div>
+          <dt>Built with</dt>
+          <dd>{built.join(", ")}</dd>
         </>
       )}
-      <h3>Languages</h3>
-      <div className="lang-split">
-        {major.map((l) => (
-          <i key={l.lang} style={{ width: `${(l.loc / total) * 100}%`, background: langColor(l.lang) }} />
-        ))}
-      </div>
-      <ul className="lang-legend">
-        {major.map((l) => (
-          <li key={l.lang}>
-            <i style={{ background: langColor(l.lang) }} />
-            {l.lang} <span>{Math.round((l.loc / total) * 100)}%</span>
-          </li>
-        ))}
-      </ul>
-      {(snapshot.entries || []).length > 0 && (
+      <dt>Languages</dt>
+      <dd>
+        {major
+          .map((l) => `${l.lang} ${Math.round((l.loc / total) * 100)}%`)
+          .join(", ")}
+      </dd>
+      {entries.length > 0 && (
         <>
-          <h3>Where it starts</h3>
-          <div className="chips">
-            {snapshot.entries!.map((e) => (
-              <button key={e} className="path-chip" onClick={() => onShow(e)} title="Show it in the diagram">
+          <dt>Entry points</dt>
+          <dd className="entry-list">
+            {entries.map((e) => (
+              <button
+                key={e}
+                className="path-chip"
+                onClick={() => onShow(e)}
+                title="Show it in the diagram"
+              >
                 {e}
               </button>
             ))}
-          </div>
+          </dd>
         </>
       )}
-    </>
+    </dl>
   );
 }

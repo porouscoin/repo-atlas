@@ -54,11 +54,12 @@ export default function Home() {
       <div className="home-inner">
         <section className="hero">
           <div>
-            <h1>Understand any codebase in a minute.</h1>
+            <h1>Map a GitHub repository</h1>
             <p className="home-sub">
-              Paste a GitHub repo and get a clear diagram of its main parts and
-              how they depend on each other, with a plain-English explanation of
-              each one.
+              Paste a public repo to get a diagram of its main parts and how
+              they depend on each other, with a short explanation of each one.
+              Open any part to go a level deeper, or ask a question about the
+              code.
             </p>
             <form
               className="home-form"
@@ -85,47 +86,20 @@ export default function Home() {
             </form>
             {error && <p className="home-error">{error}</p>}
             <div className="examples">
-              <span>Try</span>
-              {EXAMPLES.map((e) => (
-                <button key={e} onClick={() => go(e)}>
-                  {e}
-                </button>
+              <span>Examples:</span>
+              {EXAMPLES.map((e, k) => (
+                <span key={e}>
+                  <button onClick={() => go(e)}>{e}</button>
+                  {k < EXAMPLES.length - 1 ? "," : ""}
+                </span>
               ))}
             </div>
           </div>
           <Sample />
         </section>
-        <ul className="features">
-          <li>
-            <strong>See the big picture</strong>
-            <span>
-              The main parts of the repo as boxes, with arrows for what uses
-              what.
-            </span>
-          </li>
-          <li>
-            <strong>Read it in plain English</strong>
-            <span>
-              AI explains what the repo does and what each part is for.
-            </span>
-          </li>
-          <li>
-            <strong>Go one level deeper</strong>
-            <span>
-              Open any folder to see its own parts, down to single files.
-            </span>
-          </li>
-          <li>
-            <strong>Ask about the code</strong>
-            <span>
-              An agent reads the code to answer and highlights the parts it
-              means.
-            </span>
-          </li>
-        </ul>
       </div>
       <footer className="home-foot">
-        Public repos only. Built by{" "}
+        Built by{" "}
         <a href="https://ziyadhisham.com" target="_blank" rel="noreferrer">
           Ziyad Hisham
         </a>
@@ -144,7 +118,6 @@ function Sample() {
       name: "web/",
       role: "The pages people see and click through.",
       meta: "48 files · 6.2k lines",
-      color: "#7891a8",
       start: true,
     },
     {
@@ -153,7 +126,6 @@ function Sample() {
       name: "api/",
       role: "Handles requests, sign-in and payments.",
       meta: "31 files · 4.8k lines",
-      color: "#6f9c7e",
     },
     {
       x: 144,
@@ -161,7 +133,6 @@ function Sample() {
       name: "core/",
       role: "Shared models and business rules.",
       meta: "22 files · 3.1k lines",
-      color: "#6f9c7e",
     },
   ];
   return (
@@ -211,7 +182,6 @@ function Sample() {
               top: c.y,
               width: 192,
               height: 120,
-              ["--card-color" as string]: c.color,
             }}
           >
             <div className="card-top">

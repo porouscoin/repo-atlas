@@ -56,12 +56,16 @@ def level_view(snapshot: dict, path: str) -> dict:
 
     boxes = []
     if folders:
+        tooling = []  # .github/, .devcontainer/ and the like aren't parts of the app
         for name, members in folders.items():
+            if name.startswith(".") and len(folders) > 1:
+                tooling += members
+                continue
             boxes.append(box(prefix + name + "/", name, "folder", prefix + name + "/", members))
         # Code files sitting next to folders are often the core (flask/app.py), so
         # they get their own boxes while there's room; docs and config share one.
         code = sorted((i for i in loose if files[i]["lang"] not in CODE_LANGS_EXCLUDED), key=lambda i: -files[i]["loc"])
-        other = [i for i in loose if files[i]["lang"] in CODE_LANGS_EXCLUDED]
+        other = [i for i in loose if files[i]["lang"] in CODE_LANGS_EXCLUDED] + tooling
         if sum(files[i]["loc"] for i in other) == 0:
             other = []  # marker files like py.typed aren't worth a box
         room = MAX_WITH_FILES - len(boxes) - (1 if other else 0)

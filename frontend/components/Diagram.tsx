@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { langColor } from "@/lib/colors";
 import { shortNumber } from "@/lib/graph";
 import { CARD_H, CARD_W, GAP_X, GAP_Y, layout, simplify, type Box, type Link, type Placed } from "@/lib/layout";
 
@@ -112,12 +111,11 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
           {boxes.map((b, k) => {
             const p = lay.boxes[k];
             const dim = (near && !near.has(k)) || (lit && !lit.has(k));
-            const color = b.kind === "group" ? "var(--line-2)" : langColor(b.langs[0]?.lang || "Other");
             return (
               <button
                 key={b.id}
                 className={`card ${b.kind} ${selected === k ? "selected" : ""} ${dim ? "dim" : ""} ${lit?.has(k) ? "lit" : ""}`}
-                style={{ left: PAD + p.x, top: PAD + p.y, width: CARD_W, height: CARD_H, ["--card-color" as string]: color }}
+                style={{ left: PAD + p.x, top: PAD + p.y, width: CARD_W, height: CARD_H }}
                 onMouseEnter={() => setHover(k)}
                 onMouseLeave={() => setHover(null)}
                 onClick={() => onOpen(b, k)}
