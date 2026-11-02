@@ -6,7 +6,7 @@ const sans = Geist({ subsets: ["latin"], variable: "--font-sans" });
 const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 const description =
-  "See any public GitHub repo as a 3D galaxy. Files are stars, folders are clusters, imports are threads, and an AI guide answers questions on the map.";
+  "Paste a GitHub repo and get a simple diagram of its main parts, how they depend on each other, and a plain-English explanation of each one.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://repo-atlas.vercel.app"),
@@ -18,8 +18,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#04060d",
-  colorScheme: "dark",
+  themeColor: "#ffffff",
+  colorScheme: "light",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

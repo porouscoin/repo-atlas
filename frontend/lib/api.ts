@@ -18,11 +18,14 @@ export type Snapshot = {
   cached?: boolean;
 };
 
-export type CommitFile = { path: string; status: string; prev: string | null; add: number; del: number };
-export type Commit = { sha: string; author: string; date: string; message: string; files: CommitFile[] };
-export type History = { slug: string; sha: string; commits: Commit[]; limit: number };
-
-export type TourStop = { target: string; title: string; text: string };
+export type Explain = { summary: string; boxes: Record<string, string>; start: string };
+export type Level = {
+  path: string;
+  crumbs: { name: string; path: string }[];
+  boxes: import("./layout").Box[];
+  links: import("./layout").Link[];
+  explain: Explain | null;
+};
 
 export type AskEvent =
   | { type: "tool"; name: string; args: Record<string, unknown>; files: string[] }
@@ -45,8 +48,18 @@ export async function fetchRepo(slug: string): Promise<Snapshot> {
   return asJson(await fetch(`${API}/api/repo?url=${encodeURIComponent(slug)}`));
 }
 
-export async function fetchHistory(slug: string, sha: string): Promise<History> {
-  return asJson(await fetch(`${API}/api/history?slug=${encodeURIComponent(slug)}&sha=${sha}`));
+export async function fetchLevel(slug: string, sha: string, path: string): Promise<Level> {
+  return asJson(await fetch(`${API}/api/level?slug=${encodeURIComponent(slug)}&sha=${sha}&path=${encodeURIComponent(path)}`));
+}
+
+export async function fetchExplain(slug: string, sha: string, path: string): Promise<Explain> {
+  return asJson(
+    await fetch(`${API}/api/explain`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug, sha, path }),
+    }),
+  );
 }
 
 export async function fetchSummary(slug: string, sha: string, path: string): Promise<string> {
@@ -58,17 +71,6 @@ export async function fetchSummary(slug: string, sha: string, path: string): Pro
     }),
   );
   return r.summary;
-}
-
-export async function fetchTour(slug: string, sha: string): Promise<TourStop[]> {
-  const r = await asJson<{ stops: TourStop[] }>(
-    await fetch(`${API}/api/tour`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug, sha }),
-    }),
-  );
-  return r.stops;
 }
 
 export async function ask(

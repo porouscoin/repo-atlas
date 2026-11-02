@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from . import ai, store
 from .analyze import build_snapshot
 from .config import models_for, settings
+from .levels import level_view
 from .github import RepoError, commit_history, download_tarball, parse_repo, read_tarball, repo_info
 from .providers import ProviderError, RateLimited
 
@@ -192,3 +193,43 @@ async def post_tour(request: Request, body: TourIn):
     except ProviderError as e:
         print(f"tour failed: {e}")
         raise HTTPException(502, "The AI couldn't plan a tour right now. Try again.")
+
+
+@app.get("/api/level")
+async def get_level(slug: str, sha: str, path: str = ""):
+    """The boxes and arrows for one folder of the diagram, plus its explanation when it's cached."""
+    slug = check(slug, sha)
+    snapshot, _ = await repo_state(slug, sha)
+    try:
+        view = level_view(snapshot, path)
+    except KeyError:
+        raise HTTPException(404, "No such folder in this repo.")
+    view["explain"] = await store.cache_get(f"explain:{slug}:{sha}:{view['path']}")
+    return view
+
+
+class ExplainIn(BaseModel):
+    slug: str
+    sha: str
+    path: str = Field(default="", max_length=500)
+
+
+@app.post("/api/explain")
+async def post_explain(request: Request, body: ExplainIn):
+    slug = check(body.slug, body.sha)
+    snapshot, texts = await repo_state(slug, body.sha)
+    try:
+        view = level_view(snapshot, body.path)
+    except KeyError:
+        raise HTTPException(404, "No such folder in this repo.")
+    cached = await store.cache_get(f"explain:{slug}:{body.sha}:{view['path']}")
+    if cached:
+        return cached
+    limit(request, "explain", settings.summaries_per_hour)
+    try:
+        return await ai.explain_level(snapshot, texts, view)
+    except RateLimited as e:
+        raise HTTPException(429, str(e))
+    except ProviderError as e:
+        print(f"explain failed: {e}")
+        raise HTTPException(502, "The AI couldn't explain this part right now.")

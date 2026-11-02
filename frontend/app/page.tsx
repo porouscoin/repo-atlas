@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { ArrowRight, Logo } from "@/components/Icons";
-import Starfield from "@/components/Starfield";
 
 const EXAMPLES = ["pallets/flask", "expressjs/express", "gin-gonic/gin", "fastapi/fastapi", "porouscoin/break-my-agent"];
 
@@ -32,20 +31,15 @@ export default function Home() {
 
   return (
     <main className="home">
-      <Starfield />
       <div className="home-inner">
         <div className="home-brand">
           <Logo size={34} />
           <span>Repo Atlas</span>
         </div>
-        <h1>
-          Fly through any codebase
-          <br />
-          like it&apos;s a galaxy.
-        </h1>
+        <h1>Understand any codebase in a minute.</h1>
         <p className="home-sub">
-          Every file is a star, sized by its lines and colored by language. Folders pull into clusters and imports become threads
-          between them. Ask a question and an AI guide reads the code, then lights up the answer on the map.
+          Paste a GitHub repo and get a simple diagram of its main parts and how they depend on each other, with a plain-English
+          explanation of each one. Click into any part to go a level deeper, or ask a question about the code.
         </p>
         <form
           className="home-form"
@@ -80,20 +74,20 @@ export default function Home() {
         </div>
         <ul className="features">
           <li>
-            <strong>Galaxy</strong>
-            <span>3D map of files and imports. Click a star to see what it imports and what imports it.</span>
+            <strong>See the big picture</strong>
+            <span>The main parts of the repo as boxes, with arrows for what uses what.</span>
           </li>
           <li>
-            <strong>Size</strong>
-            <span>Nested circles show where the code actually lives.</span>
+            <strong>Read it in plain English</strong>
+            <span>AI explains what the repo does and what each part is for.</span>
           </li>
           <li>
-            <strong>Time-lapse</strong>
-            <span>Replay the last 200 commits and watch the repo grow.</span>
+            <strong>Go one level deeper</strong>
+            <span>Open any folder to see its own parts, down to single files.</span>
           </li>
           <li>
-            <strong>Ask and Tour</strong>
-            <span>An agent searches and reads the code, and the camera flies to what it finds.</span>
+            <strong>Ask about the code</strong>
+            <span>An agent reads the code to answer and highlights the parts it means.</span>
           </li>
         </ul>
       </div>

@@ -113,3 +113,40 @@ def test_tools():
     assert mentioned_files("See `app/main.py:1` and `db.py` and the `app/` folder", texts) == ["app/main.py", "app/db.py", "app/"]
 
 
+
+
+def test_levels_and_explain():
+    client.get("/api/repo", params={"url": "me/repo"})
+    r = client.get("/api/level", params={"slug": "me/repo", "sha": SHA})
+    data = r.json()
+    # The root only wraps app/ and a README, so the diagram starts inside app/.
+    assert data["path"] == "app/"
+    assert data["explain"] is None
+    inner = client.get("/api/level", params={"slug": "me/repo", "sha": SHA, "path": "app/"}).json()
+    assert {b["name"] for b in inner["boxes"]} == {"__init__.py", "db.py", "main.py"}
+    main_i = [b["name"] for b in inner["boxes"]].index("main.py")
+    db_i = [b["name"] for b in inner["boxes"]].index("db.py")
+    assert {"from": main_i, "to": db_i, "count": 1} in inner["links"]
+    e = client.post("/api/explain", json={"slug": "me/repo", "sha": SHA, "path": "app/"}).json()
+    assert e["summary"] and set(e["boxes"]) == {"__init__.py", "db.py", "main.py"}
+    again = client.get("/api/level", params={"slug": "me/repo", "sha": SHA, "path": "app/"}).json()
+    assert again["explain"]["summary"] == e["summary"]
+    assert client.get("/api/level", params={"slug": "me/repo", "sha": SHA, "path": "nope/"}).status_code == 404
+
+
+def test_level_skips_wrapper_folders():
+    from app.levels import level_view
+
+    snap = {
+        "slug": "a/b",
+        "files": [
+            {"path": "src/pkg/a.py", "lang": "Python", "loc": 10},
+            {"path": "src/pkg/sub/b.py", "lang": "Python", "loc": 5},
+            {"path": "README.md", "lang": "Markdown", "loc": 3},
+        ],
+        "edges": [[0, 1]],
+    }
+    v = level_view(snap, "src/")
+    assert v["path"] == "src/pkg/" and [b["name"] for b in v["boxes"]] == ["sub", "Files here"]
+    assert v["links"] == [{"from": 1, "to": 0, "count": 1}]
+    assert [c["name"] for c in v["crumbs"]] == ["b", "src", "pkg"]

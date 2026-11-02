@@ -325,3 +325,72 @@ async def tour(snapshot: dict, texts: dict[str, str]) -> list[dict]:
         raise ProviderError("The tour came back empty.")
     await store.cache_set(key, {"stops": stops})
     return stops
+
+
+# ------------------------------------------------------------ level explain
+
+EXPLAIN_PROMPT = """You explain codebases in plain English to someone seeing this repo for the first time.
+The visitor is looking at a simple diagram of one folder of the repo. Each box is a part of it.
+
+{overview}
+
+Reply with JSON only:
+{{"summary": "<2 or 3 short sentences: what this {scope} does and how its parts work together. No jargon.>",
+  "boxes": {{"<box name exactly as given>": "<what this part does, at most 12 plain words>"}},
+  "start": "<the one box name a newcomer should open first>"}}"""
+
+
+def _box_context(view: dict, snapshot: dict, texts: dict[str, str]) -> str:
+    from collections import Counter
+
+    files = snapshot["files"]
+    indeg = Counter(t for _, t in snapshot["edges"])
+    parts = []
+    budget = 12000
+    for b in view["boxes"]:
+        members = sorted(b["files"], key=lambda i: (-indeg[i], -files[i]["loc"]))
+        names = ", ".join(files[i]["path"][len(view["path"]) :] for i in members[:12])
+        more = f" and {len(members) - 12} more" if len(members) > 12 else ""
+        block = f"## {b['name']} ({b['kind']}, {len(members)} files, {b['loc']} lines)\nFiles: {names}{more}"
+        for i in members[:2]:
+            head = "\n".join(texts.get(files[i]["path"], "").splitlines()[:14])
+            block += f"\n--- {files[i]['path']}\n{head}"
+        parts.append(block[: max(400, budget // max(1, len(view["boxes"])))])
+    arrows = [f"{view['boxes'][l['from']]['name']} uses {view['boxes'][l['to']]['name']} ({l['count']} imports)" for l in view["links"][:20]]
+    if arrows:
+        parts.append("Dependencies: " + "; ".join(arrows))
+    return "\n\n".join(parts)
+
+
+async def explain_level(snapshot: dict, texts: dict[str, str], view: dict) -> dict:
+    key = f"explain:{snapshot['slug']}:{snapshot['sha']}:{view['path']}"
+    cached = await store.cache_get(key)
+    if cached:
+        return cached
+    scope = "repo" if not view["path"] else f"folder ({view['path']})"
+    context = _box_context(view, snapshot, texts)
+    if not view["path"]:
+        readme = next((p for p in sorted(texts, key=len) if posixpath.basename(p).lower().startswith("readme")), None)
+        if readme:
+            context = f"--- {readme}\n{texts[readme][:2000]}\n\n{context}"
+    result = await call_any(
+        models_for("summary"),
+        [
+            {"role": "system", "content": EXPLAIN_PROMPT.format(overview=overview(snapshot), scope=scope)},
+            {"role": "user", "content": context},
+        ],
+        max_tokens=1500,
+        temperature=0.3,
+        json_mode=True,
+    )
+    parsed = parse_json(result.content)
+    names = {b["name"] for b in view["boxes"]}
+    data = {
+        "summary": str(parsed.get("summary") or "")[:600],
+        "boxes": {k: str(v)[:140] for k, v in (parsed.get("boxes") or {}).items() if k in names},
+        "start": parsed.get("start") if parsed.get("start") in names else "",
+    }
+    if not data["summary"]:
+        raise ProviderError("The explanation came back empty.")
+    await store.cache_set(key, data)
+    return data

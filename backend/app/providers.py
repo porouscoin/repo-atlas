@@ -72,6 +72,13 @@ def _default_mock(messages: list[dict], tools: list[dict] | None) -> ModelResult
                 }
             )
         )
+    if "plain english" in system:
+        names = re.findall(r"^## (.+?) \(", str(last.get("content", "")), re.M)
+        return ModelResult(
+            content=json.dumps(
+                {"summary": "A mock explanation. Set GROQ_API_KEY for a real one.", "boxes": {n: "A mock role for this part." for n in names}, "start": names[0] if names else ""}
+            )
+        )
     if "one sentence" in system:
         return ModelResult(content="A mock summary of this file.")
     if tools and last["role"] == "user":

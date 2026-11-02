@@ -1,7 +1,7 @@
-// Language colors, tuned to glow on a dark background and stay apart from each other.
+// Language colors, kept apart from each other and readable on white.
 export const LANG_COLORS: Record<string, string> = {
   TypeScript: "#38c8ff",
-  JavaScript: "#ffd84d",
+  JavaScript: "#e8c22e",
   Python: "#7c8cff",
   Go: "#22d3c5",
   Rust: "#ff7a45",
@@ -24,14 +24,12 @@ export const LANG_COLORS: Record<string, string> = {
   HTML: "#ff6f3c",
   Shell: "#a6e65a",
   SQL: "#e8b03d",
-  Markdown: "#8792a8",
-  Config: "#5f6a80",
-  Other: "#4a5263",
+  Markdown: "#9aa3b2",
+  Config: "#b6bcc8",
+  Other: "#cfd3da",
 };
 
 export function langColor(lang: string): string {
   return LANG_COLORS[lang] || LANG_COLORS.Other;
 }
 
-export const IMPORTS_COLOR = "#5ad1ff"; // files the selected file imports
-export const IMPORTERS_COLOR = "#ff9d5c"; // files that import the selected file
