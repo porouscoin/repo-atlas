@@ -72,3 +72,20 @@ export function Logo({ size = 22 }: P) {
     </svg>
   );
 }
+export const Play = ({ size }: P) => (
+  <svg {...base(size)}>
+    <path d="M7 4.5v15l12-7.5z" fill="currentColor" />
+  </svg>
+);
+export const Pause = ({ size }: P) => (
+  <svg {...base(size)}>
+    <path d="M8 5v14M16 5v14" strokeWidth={3} />
+  </svg>
+);
+export const History = ({ size }: P) => (
+  <svg {...base(size)}>
+    <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6" />
+    <path d="M3 4v4.5h4.5" />
+    <path d="M12 7.5V12l3 2" />
+  </svg>
+);

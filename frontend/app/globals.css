@@ -287,3 +287,60 @@ h1, h2, h3, p { margin: 0; }
 .flows button { text-align: left; color: inherit; font: inherit; padding: 2px 0; }
 .flows button:hover strong { color: var(--accent); }
 .proof li.more { border: 0; background: none; padding: 0 2px; }
+
+/* ---- history player ---- */
+.canvas-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.canvas-head .crumbs { margin-bottom: 0; }
+.history-btn { flex: 0 0 auto; gap: 8px; height: 36px; padding: 0 14px; font-size: 14.5px; }
+.history-btn.on { border-color: var(--accent); color: var(--accent); }
+.card .grow-bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); transition: width .6s ease; border-radius: 0 2px 0 0; }
+.card.ghost { opacity: 0.28; border-style: dashed; background: transparent; }
+.card.ghost .card-role { visibility: hidden; }
+.card { transition: opacity .5s, border-color .4s, background .15s; }
+.card.grew { border-color: var(--accent); }
+.link { transition: opacity .5s; }
+.link.gone { opacity: 0; pointer-events: none; }
+.player {
+  position: sticky; bottom: 12px; z-index: 3; margin-top: 16px; padding: 14px 18px 10px;
+  border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface);
+}
+.player-head { display: flex; align-items: center; gap: 16px; }
+.play { flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center; border-radius: var(--radius); background: var(--accent); color: var(--on-accent); }
+.play:hover { background: var(--accent-hover); }
+.player-when { display: grid; grid-template-columns: auto 1fr; column-gap: 12px; min-width: 0; flex: 1; align-items: baseline; }
+.player-date { font-family: var(--mono); font-size: 22px; font-weight: 600; color: var(--text); grid-row: span 2; }
+.player-msg { font-size: 15px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-sub { font-size: 13px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-size { flex: 0 0 auto; text-align: right; font-size: 14px; color: var(--text-2); display: flex; flex-direction: column; }
+.player-size p { margin: 0; }
+.player-size strong { font-family: var(--mono); font-size: 20px; color: var(--text); font-weight: 600; }
+.player-size span { font-size: 13px; color: var(--text-3); }
+.track { position: relative; height: 56px; margin-top: 12px; cursor: pointer; touch-action: none; border-bottom: 1px solid var(--line-2); }
+.track:focus-visible { outline: 2px solid var(--accent-soft-2); outline-offset: 4px; }
+.track svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.track-line { fill: none; stroke: var(--line-2); stroke-width: 1.5; }
+.track-done { fill: none; stroke: var(--accent); stroke-width: 2; }
+.track-area { fill: var(--accent-soft); }
+.track-now { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--text); transition: left .3s ease; }
+.track-years { position: relative; height: 18px; margin-top: 4px; font-size: 12px; color: var(--text-3); font-family: var(--mono); }
+.track-years span { position: absolute; transform: translateX(-50%); }
+.track-years span:first-child { transform: none; }
+.link-btn { color: var(--accent); font: inherit; padding: 0; }
+.link-btn:hover { text-decoration: underline; }
+.file-list button.later { opacity: 0.5; }
+@media (max-width: 560px) {
+  .player-when { grid-template-columns: 1fr; }
+  .player-date { grid-row: auto; font-size: 18px; }
+  .player-sub { display: none; }
+  .history-btn { padding: 0 10px; }
+}
+@media (min-width: 861px) {
+  .canvas.playing { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 16px; }
+  .canvas.playing .diagram-wrap { flex: 1; min-height: 0; overflow: auto; }
+  .canvas.playing .player { position: static; flex: 0 0 auto; }
+}
+@media (max-width: 860px) {
+  .canvas.playing .player { position: fixed; left: 8px; right: 8px; bottom: 8px; margin: 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35); }
+  .canvas.playing ~ .side { padding-bottom: 210px; }
+}
+.canvas.playing .zoom { display: none; }

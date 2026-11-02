@@ -3,7 +3,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { shortNumber } from "@/lib/graph";
-import { CARD_H, CARD_W, GAP_X, GAP_Y, layout, simplify, type Box, type Link, type Placed } from "@/lib/layout";
+import {
+  CARD_H,
+  CARD_W,
+  GAP_X,
+  GAP_Y,
+  layout,
+  simplify,
+  type Box,
+  type Link,
+  type Placed,
+} from "@/lib/layout";
 
 type Props = {
   boxes: Box[];
@@ -14,6 +24,7 @@ type Props = {
   lit: Set<number> | null; // boxes the AI pointed at
   impact: Map<number, number> | null; // box -> how many of its files depend on the selected box
   link: Link | null; // the arrow whose proof is open
+  growth?: Map<number, { lines: number; files: number; grew: boolean }> | null; // sizes at a point in history
   onOpen: (b: Box, k: number) => void;
   onLink: (l: Link) => void;
 };
@@ -24,14 +35,35 @@ const MARGIN_LANE = 14; // spacing of back links running down the right margin
 type Pt = [number, number];
 type Route = { points: Pt[]; back: boolean; label: Pt };
 
-export default function Diagram({ boxes, links: allLinks, roles, start, selected, lit, impact, link, onOpen, onLink }: Props) {
-  const { shown: links, hidden } = useMemo(() => simplify(allLinks, boxes.length), [allLinks, boxes.length]);
+export default function Diagram({
+  boxes,
+  links: allLinks,
+  roles,
+  start,
+  selected,
+  lit,
+  impact,
+  link,
+  growth,
+  onOpen,
+  onLink,
+}: Props) {
+  const { shown: links, hidden } = useMemo(
+    () => simplify(allLinks, boxes.length),
+    [allLinks, boxes.length],
+  );
   const wrap = useRef<HTMLDivElement>(null);
   const [avail, setAvail] = useState(1200);
   // Narrow screens get fewer boxes per row instead of a tiny diagram.
   const perRow = avail < 520 ? 1 : avail < 820 ? 2 : 3;
-  const lay = useMemo(() => layout(boxes, links, perRow), [boxes, links, perRow]);
-  const routes = useMemo(() => route(links, lay.boxes, lay.width), [links, lay]);
+  const lay = useMemo(
+    () => layout(boxes, links, perRow),
+    [boxes, links, perRow],
+  );
+  const routes = useMemo(
+    () => route(links, lay.boxes, lay.width),
+    [links, lay],
+  );
   const backCount = routes.filter((r) => r.back).length;
 
   const [hover, setHover] = useState<number | null>(null);
@@ -39,7 +71,8 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
   const [fit, setFit] = useState(1);
   const [zoom, setZoom] = useState<number | null>(null); // null = fit to width
 
-  const W = lay.width + PAD * 2 + (backCount ? 24 + backCount * MARGIN_LANE : 0);
+  const W =
+    lay.width + PAD * 2 + (backCount ? 24 + backCount * MARGIN_LANE : 0);
   const H = lay.height + PAD * 2;
 
   useEffect(() => {
@@ -47,15 +80,19 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
     if (!el) return;
     const measure = () => {
       setAvail(el.clientWidth);
-      setFit(Math.max(0.5, Math.min(1, (el.clientWidth - 8) / W)));
+      const wide = (el.clientWidth - 8) / W;
+      // While history plays, fit the whole diagram so every part is in view.
+      const tall = growth ? (el.clientHeight - 8) / H : Infinity;
+      setFit(Math.max(growth ? 0.6 : 0.5, Math.min(1, wide, tall)));
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [W]);
+  }, [W, H, !!growth]); // eslint-disable-line react-hooks/exhaustive-deps
   const scale = zoom ?? fit;
-  const step = (d: number) => setZoom(Math.round(Math.max(0.4, Math.min(1.6, scale + d)) * 10) / 10);
+  const step = (d: number) =>
+    setZoom(Math.round(Math.max(0.4, Math.min(1.6, scale + d)) * 10) / 10);
 
   const focus = hover ?? selected;
   const proving = link !== null && hover === null;
@@ -75,26 +112,60 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
     <div className="diagram-wrap" ref={wrap}>
       {hidden > 0 && (
         <p className="hidden-note">
-          Showing the main links. {hidden} weaker or reverse link{hidden === 1 ? " is" : "s are"} hidden.
+          Showing the main links. {hidden} weaker or reverse link
+          {hidden === 1 ? " is" : "s are"} hidden.
         </p>
       )}
       <div className="diagram" style={{ width: W * scale, height: H * scale }}>
-        <div style={{ width: W, height: H, transform: `scale(${scale})`, transformOrigin: "0 0", position: "relative" }}>
+        <div
+          style={{
+            width: W,
+            height: H,
+            transform: `scale(${scale})`,
+            transformOrigin: "0 0",
+            position: "relative",
+          }}
+        >
           <svg className="arrows" width={W} height={H}>
             <defs>
-              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto">
+              <marker
+                id="arrow"
+                viewBox="0 0 10 10"
+                refX="9"
+                refY="5"
+                markerWidth="11"
+                markerHeight="11"
+                markerUnits="userSpaceOnUse"
+                orient="auto"
+              >
                 <path d="M0 1L10 5L0 9z" fill="context-stroke" />
               </marker>
             </defs>
             {links.map((l, k) => {
               const r = routes[k];
+              const gone =
+                growth &&
+                (!growth.get(l.from)?.lines || !growth.get(l.to)?.lines);
               const d = rounded(r.points, 10);
-              const chosen = proving && l.from === link.from && l.to === link.to;
-              const active = proving ? chosen : focus !== null && (l.from === focus || l.to === focus);
-              const dim = (focus !== null || proving) && !active && hoverLink !== k;
-              const showLabel = hoverLink === k || chosen || (hover !== null && active && links.filter((x) => x.from === hover || x.to === hover).length <= 3);
+              const chosen =
+                proving && l.from === link.from && l.to === link.to;
+              const active = proving
+                ? chosen
+                : focus !== null && (l.from === focus || l.to === focus);
+              const dim =
+                (focus !== null || proving) && !active && hoverLink !== k;
+              const showLabel =
+                hoverLink === k ||
+                chosen ||
+                (hover !== null &&
+                  active &&
+                  links.filter((x) => x.from === hover || x.to === hover)
+                    .length <= 3);
               return (
-                <g key={k} className={`link ${active ? "active" : ""} ${dim ? "dim" : ""} ${r.back ? "back" : ""} ${chosen ? "chosen" : ""}`}>
+                <g
+                  key={k}
+                  className={`link ${active ? "active" : ""} ${dim ? "dim" : ""} ${r.back ? "back" : ""} ${chosen ? "chosen" : ""} ${gone ? "gone" : ""}`}
+                >
                   <path
                     d={d}
                     className="hit"
@@ -104,10 +175,21 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
                   >
                     <title>Show the imports behind this arrow</title>
                   </path>
-                  <path d={d} className="line" strokeWidth={1.4 + (l.count / maxCount) * 2.6} markerEnd="url(#arrow)" />
+                  <path
+                    d={d}
+                    className="line"
+                    strokeWidth={1.4 + (l.count / maxCount) * 2.6}
+                    markerEnd="url(#arrow)"
+                  />
                   {showLabel && (
-                    <text x={r.label[0]} y={r.label[1]} className="link-label" textAnchor="middle">
-                      {boxes[l.from].name} uses {boxes[l.to].name} · {l.count} import{l.count === 1 ? "" : "s"}
+                    <text
+                      x={r.label[0]}
+                      y={r.label[1]}
+                      className="link-label"
+                      textAnchor="middle"
+                    >
+                      {boxes[l.from].name} uses {boxes[l.to].name} · {l.count}{" "}
+                      import{l.count === 1 ? "" : "s"}
                     </text>
                   )}
                 </g>
@@ -116,7 +198,10 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
           </svg>
 
           {lay.looseRowY !== null && (
-            <div className="loose-label" style={{ top: PAD + lay.looseRowY, left: PAD, width: lay.width }}>
+            <div
+              className="loose-label"
+              style={{ top: PAD + lay.looseRowY, left: PAD, width: lay.width }}
+            >
               <span>Not linked by imports</span>
             </div>
           )}
@@ -125,36 +210,75 @@ export default function Diagram({ boxes, links: allLinks, roles, start, selected
             const p = lay.boxes[k];
             const inLink = link !== null && (k === link.from || k === link.to);
             const hits = impact?.get(k);
-            const dim = proving ? !inLink : (near && !near.has(k) && !hits) || (lit && !lit.has(k));
+            const g = growth?.get(k);
+            const ghost = g !== undefined && g.lines === 0;
+            const dim = proving
+              ? !inLink
+              : (near && !near.has(k) && !hits) || (lit && !lit.has(k));
             return (
               <button
                 key={b.id}
-                className={`card ${b.kind} ${selected === k || inLink ? "selected" : ""} ${dim ? "dim" : ""} ${lit?.has(k) ? "lit" : ""} ${hits ? "impact" : ""}`}
-                style={{ left: PAD + p.x, top: PAD + p.y, width: CARD_W, height: CARD_H }}
+                className={`card ${b.kind} ${selected === k || inLink ? "selected" : ""} ${dim ? "dim" : ""} ${lit?.has(k) ? "lit" : ""} ${hits ? "impact" : ""} ${ghost ? "ghost" : ""} ${g?.grew ? "grew" : ""}`}
+                style={{
+                  left: PAD + p.x,
+                  top: PAD + p.y,
+                  width: CARD_W,
+                  height: CARD_H,
+                }}
                 onMouseEnter={() => setHover(k)}
                 onMouseLeave={() => setHover(null)}
                 onClick={() => onOpen(b, k)}
               >
                 <div className="card-top">
-                  <span className="card-name">{b.kind === "folder" ? `${b.name}/` : b.name}</span>
+                  <span className="card-name">
+                    {b.kind === "folder" ? `${b.name}/` : b.name}
+                  </span>
                   {hits ? (
                     <span className="impact-tag">
                       {hits} file{hits === 1 ? "" : "s"} affected
                     </span>
                   ) : (
-                    start === b.name && <span className="start-tag">Start here</span>
+                    start === b.name && (
+                      <span className="start-tag">Start here</span>
+                    )
                   )}
                 </div>
                 <p className={`card-role ${roles ? "" : "loading"}`}>
-                  {roles ? roles[b.name] || (b.parts ? b.parts.slice(0, 4).join(", ") + "…" : "") : "Reading…"}
+                  {roles
+                    ? roles[b.name] ||
+                      (b.parts ? b.parts.slice(0, 4).join(", ") + "…" : "")
+                    : "Reading…"}
                 </p>
                 <div className="card-meta">
-                  <span>
-                    {b.files.length === 1 ? "1 file" : `${shortNumber(b.files.length)} files`} · {shortNumber(b.loc)} lines
-                    {b.langs[0] && b.kind !== "group" ? ` · ${b.langs[0].lang}` : ""}
-                  </span>
-                  {b.kind === "folder" && <span className="open-hint">Open →</span>}
+                  {g ? (
+                    <span>
+                      {ghost
+                        ? "Not there yet"
+                        : `${g.files === 1 ? "1 file" : `${shortNumber(g.files)} files`} · ${shortNumber(g.lines)} lines`}
+                    </span>
+                  ) : (
+                    <span>
+                      {b.files.length === 1
+                        ? "1 file"
+                        : `${shortNumber(b.files.length)} files`}{" "}
+                      · {shortNumber(b.loc)} lines
+                      {b.langs[0] && b.kind !== "group"
+                        ? ` · ${b.langs[0].lang}`
+                        : ""}
+                    </span>
+                  )}
+                  {b.kind === "folder" && !g && (
+                    <span className="open-hint">Open →</span>
+                  )}
                 </div>
+                {g && (
+                  <span
+                    className="grow-bar"
+                    style={{
+                      width: `${Math.min(100, (g.lines / Math.max(1, b.loc)) * 100)}%`,
+                    }}
+                  />
+                )}
               </button>
             );
           })}
@@ -196,7 +320,9 @@ function route(links: Link[], placed: Placed[], width: number): Route[] {
     if (row < 0) return PAD / 2;
     const next = rowTop.get(row + 1);
     const bottom = (rowTop.get(row) ?? 0) + CARD_H;
-    return next !== undefined && next - bottom < GAP_Y * 1.5 ? (bottom + next) / 2 : bottom + GAP_Y / 2;
+    return next !== undefined && next - bottom < GAP_Y * 1.5
+      ? (bottom + next) / 2
+      : bottom + GAP_Y / 2;
   };
 
   // Spread arrow ends along each card edge, ordered by where the other end is.
@@ -207,14 +333,28 @@ function route(links: Link[], placed: Placed[], width: number): Route[] {
     const other = side === "from" ? "to" : "from";
     for (const ks of by.values()) {
       ks.sort((a, b) => placed[links[a][other]].x - placed[links[b][other]].x);
-      ks.forEach((k, j) => ends.set(`${side}${k}`, ((j + 1) / (ks.length + 1) - 0.5) * CARD_W * 0.6));
+      ks.forEach((k, j) =>
+        ends.set(
+          `${side}${k}`,
+          ((j + 1) / (ks.length + 1) - 0.5) * CARD_W * 0.6,
+        ),
+      );
     }
   };
   spread("from");
   spread("to");
 
   // Plan each route by the gaps it uses, then give every user of a gap its own lane.
-  type Plan = { k: number; x1: number; y1: number; x2: number; y2: number; back: boolean; gaps: number[]; channel: number | null };
+  type Plan = {
+    k: number;
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    back: boolean;
+    gaps: number[];
+    channel: number | null;
+  };
   const plans: Plan[] = links.map((l, k) => {
     const a = placed[l.from];
     const b = placed[l.to];
@@ -222,26 +362,61 @@ function route(links: Link[], placed: Placed[], width: number): Route[] {
     const y1 = PAD + a.y + CARD_H;
     const x2 = PAD + b.x + CARD_W / 2 + (ends.get(`to${k}`) || 0);
     const y2 = PAD + b.y;
-    if (b.row <= a.row) return { k, x1, y1, x2, y2, back: true, gaps: [a.row, b.row - 1], channel: null };
-    if (b.row === a.row + 1) return { k, x1, y1, x2, y2, back: false, gaps: [a.row], channel: null };
+    if (b.row <= a.row)
+      return {
+        k,
+        x1,
+        y1,
+        x2,
+        y2,
+        back: true,
+        gaps: [a.row, b.row - 1],
+        channel: null,
+      };
+    if (b.row === a.row + 1)
+      return { k, x1, y1, x2, y2, back: false, gaps: [a.row], channel: null };
     // Skips rows: is the straight drop at x2 clear of the cards in between?
-    const between = placed.filter((p, i) => i !== l.from && i !== l.to && p.row > a.row && p.row < b.row);
-    const hits = (x: number) => between.some((p) => x > PAD + p.x - 10 && x < PAD + p.x + CARD_W + 10);
-    if (!hits(x2)) return { k, x1, y1, x2, y2, back: false, gaps: [a.row], channel: null };
-    const options = between.flatMap((p) => [PAD + p.x - GAP_X / 2, PAD + p.x + CARD_W + GAP_X / 2]).filter((x) => !hits(x));
-    const channel = options.sort((m, n) => Math.abs(m - x1) + Math.abs(m - x2) - (Math.abs(n - x1) + Math.abs(n - x2)))[0];
-    return { k, x1, y1, x2, y2, back: false, gaps: [a.row, b.row - 1], channel: channel ?? PAD - GAP_X / 2 };
+    const between = placed.filter(
+      (p, i) => i !== l.from && i !== l.to && p.row > a.row && p.row < b.row,
+    );
+    const hits = (x: number) =>
+      between.some((p) => x > PAD + p.x - 10 && x < PAD + p.x + CARD_W + 10);
+    if (!hits(x2))
+      return { k, x1, y1, x2, y2, back: false, gaps: [a.row], channel: null };
+    const options = between
+      .flatMap((p) => [PAD + p.x - GAP_X / 2, PAD + p.x + CARD_W + GAP_X / 2])
+      .filter((x) => !hits(x));
+    const channel = options.sort(
+      (m, n) =>
+        Math.abs(m - x1) +
+        Math.abs(m - x2) -
+        (Math.abs(n - x1) + Math.abs(n - x2)),
+    )[0];
+    return {
+      k,
+      x1,
+      y1,
+      x2,
+      y2,
+      back: false,
+      gaps: [a.row, b.row - 1],
+      channel: channel ?? PAD - GAP_X / 2,
+    };
   });
 
   const lanes = new Map<string, number>();
   const users = new Map<number, Plan[]>();
-  for (const p of plans) for (const g of p.gaps) users.set(g, [...(users.get(g) || []), p]);
+  for (const p of plans)
+    for (const g of p.gaps) users.set(g, [...(users.get(g) || []), p]);
   for (const [g, ps] of users) {
     ps.sort((m, n) => (m.x1 + m.x2) / 2 - (n.x1 + n.x2) / 2);
     const space = Math.min(12, (GAP_Y - 36) / Math.max(1, ps.length - 1));
-    ps.forEach((p, j) => lanes.set(`${p.k}:${g}`, (j - (ps.length - 1) / 2) * space));
+    ps.forEach((p, j) =>
+      lanes.set(`${p.k}:${g}`, (j - (ps.length - 1) / 2) * space),
+    );
   }
-  const laneY = (p: Plan, g: number) => gapY(g) + (lanes.get(`${p.k}:${g}`) || 0);
+  const laneY = (p: Plan, g: number) =>
+    gapY(g) + (lanes.get(`${p.k}:${g}`) || 0);
 
   let margin = 0;
   return plans.map((p) => {
@@ -251,7 +426,14 @@ function route(links: Link[], placed: Placed[], width: number): Route[] {
       const yb = laneY(p, p.gaps[1]);
       return {
         back: true,
-        points: [[p.x1, p.y1], [p.x1, ya], [mx, ya], [mx, yb], [p.x2, yb], [p.x2, p.y2]],
+        points: [
+          [p.x1, p.y1],
+          [p.x1, ya],
+          [mx, ya],
+          [mx, yb],
+          [p.x2, yb],
+          [p.x2, p.y2],
+        ],
         label: [mx - 8, (ya + yb) / 2],
       };
     }
@@ -259,14 +441,28 @@ function route(links: Link[], placed: Placed[], width: number): Route[] {
       const straight = Math.abs(p.x1 - p.x2) < 1;
       return {
         back: false,
-        points: [[p.x1, p.y1], [p.x1, ya], [p.x2, ya], [p.x2, p.y2]],
-        label: straight ? [p.x1, (p.y1 + p.y2) / 2 + 5] : [(p.x1 + p.x2) / 2, ya - 8],
+        points: [
+          [p.x1, p.y1],
+          [p.x1, ya],
+          [p.x2, ya],
+          [p.x2, p.y2],
+        ],
+        label: straight
+          ? [p.x1, (p.y1 + p.y2) / 2 + 5]
+          : [(p.x1 + p.x2) / 2, ya - 8],
       };
     }
     const yb = laneY(p, p.gaps[1]);
     return {
       back: false,
-      points: [[p.x1, p.y1], [p.x1, ya], [p.channel, ya], [p.channel, yb], [p.x2, yb], [p.x2, p.y2]],
+      points: [
+        [p.x1, p.y1],
+        [p.x1, ya],
+        [p.channel, ya],
+        [p.channel, yb],
+        [p.x2, yb],
+        [p.x2, p.y2],
+      ],
       label: [(p.x1 + p.channel) / 2, ya - 8],
     };
   });
@@ -274,7 +470,9 @@ function route(links: Link[], placed: Placed[], width: number): Route[] {
 
 // A polyline with its corners rounded off.
 function rounded(points: Pt[], r: number): string {
-  const pts = points.filter((p, i) => i === 0 || p[0] !== points[i - 1][0] || p[1] !== points[i - 1][1]);
+  const pts = points.filter(
+    (p, i) => i === 0 || p[0] !== points[i - 1][0] || p[1] !== points[i - 1][1],
+  );
   let d = `M${pts[0][0]} ${pts[0][1]}`;
   for (let i = 1; i < pts.length - 1; i++) {
     const [px, py] = pts[i - 1];

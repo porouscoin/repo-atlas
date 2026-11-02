@@ -126,3 +126,13 @@ export async function fetchEvidence(slug: string, sha: string, pairs: [string, s
   );
   return r.evidence;
 }
+
+export type Timeline = {
+  commits: number;
+  frames: { sha: string; n: number; date: string; message: string; author: string; files: number; lines: number }[];
+  boxes: Record<string, { lines: number[]; files: number[] }>;
+};
+
+export async function fetchTimeline(slug: string, sha: string, path: string): Promise<Timeline> {
+  return asJson(await fetch(`${API}/api/timeline?slug=${encodeURIComponent(slug)}&sha=${sha}&path=${encodeURIComponent(path)}`));
+}

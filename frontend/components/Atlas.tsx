@@ -10,16 +10,33 @@ import {
   fetchLevel,
   fetchRepo,
   fetchSummary,
+  fetchTimeline,
   type AskEvent,
   type Evidence,
   type Explain,
   type Level,
   type Snapshot,
+  type Timeline,
 } from "@/lib/api";
-import { buildGraph, dependents, pairsBetween, shortNumber, type Graph } from "@/lib/graph";
+import {
+  buildGraph,
+  dependents,
+  pairsBetween,
+  shortNumber,
+  type Graph,
+} from "@/lib/graph";
 import type { Box, Link as Arrow } from "@/lib/layout";
 import Diagram from "./Diagram";
-import { ArrowUp, ChevronLeft, Close, External, Logo, Star } from "./Icons";
+import {
+  ArrowUp,
+  ChevronLeft,
+  Close,
+  External,
+  History,
+  Logo,
+  Star,
+} from "./Icons";
+import TimelineBar, { month } from "./TimelineBar";
 import Markdown from "./Markdown";
 import ThemeToggle from "./ThemeToggle";
 
@@ -68,6 +85,11 @@ export default function Atlas({ slug }: { slug: string }) {
   const [busy, setBusy] = useState(false);
   const [litPaths, setLitPaths] = useState<string[] | null>(null);
   const [arrow, setArrow] = useState<Arrow | null>(null);
+  const [history, setHistory] = useState(false);
+  const [tl, setTl] = useState<Timeline | null>(null);
+  const [tlError, setTlError] = useState("");
+  const [frame, setFrame] = useState(0);
+  const [playing, setPlaying] = useState(false);
   const chatEnd = useRef<HTMLDivElement>(null);
 
   // --------------------------------------------------------------- loading
@@ -121,6 +143,83 @@ export default function Atlas({ slug }: { slug: string }) {
     };
   }, [snapshot, path]);
 
+  // ---------------------------------------------------------------- history
+
+  useEffect(() => {
+    if (!history || !snapshot || !level) return;
+    let alive = true;
+    setTlError("");
+    fetchTimeline(snapshot.slug, snapshot.sha, level.path)
+      .then((t) => {
+        if (!alive) return;
+        setTl((old) => {
+          if (!old) {
+            setFrame(0);
+            setPlaying(true);
+          }
+          return t;
+        });
+      })
+      .catch((e) => alive && setTlError(e.message));
+    return () => {
+      alive = false;
+    };
+  }, [history, snapshot, level]);
+
+  useEffect(() => {
+    if (!playing || !tl) return;
+    const last = tl.frames.length - 1;
+    const t = setInterval(() => {
+      setFrame((f) => {
+        if (f >= last) {
+          setPlaying(false);
+          return f;
+        }
+        return f + 1;
+      });
+    }, 750);
+    return () => clearInterval(t);
+  }, [playing, tl]);
+
+  const growth = useMemo(() => {
+    if (!history || !tl || !level) return null;
+    const m = new Map<
+      number,
+      { lines: number; files: number; grew: boolean }
+    >();
+    level.boxes.forEach((b, k) => {
+      const s = tl.boxes[b.id];
+      if (!s) return;
+      const lines = s.lines[frame] ?? 0;
+      m.set(k, {
+        lines,
+        files: s.files[frame] ?? 0,
+        // a real step up, not a one-line fix
+        grew:
+          frame > 0 &&
+          lines - (s.lines[frame - 1] ?? 0) > Math.max(20, b.loc * 0.03),
+      });
+    });
+    return m.size ? m : null;
+  }, [history, tl, level, frame]);
+
+  const toggleHistory = () => {
+    if (history) {
+      setHistory(false);
+      setPlaying(false);
+      return;
+    }
+    setSelected(null);
+    setArrow(null);
+    setLitPaths(null);
+    setTab("explain");
+    setHistory(true);
+    if (tl) {
+      setFrame(0);
+      setPlaying(true);
+    }
+  };
+
   const go = useCallback((p: string) => {
     setPath(p);
     setLitPaths(null);
@@ -156,6 +255,7 @@ export default function Atlas({ slug }: { slug: string }) {
       go(b.target);
       return;
     }
+    if (history) return;
     setSelected(k);
     setArrow(null);
     setTab("explain");
@@ -163,6 +263,7 @@ export default function Atlas({ slug }: { slug: string }) {
   };
 
   const prove = (l: Arrow) => {
+    if (history) return;
     setSelected(null);
     setArrow(l);
     setTab("explain");
@@ -357,21 +458,32 @@ export default function Atlas({ slug }: { slug: string }) {
         </div>
       </header>
 
-      <main className="canvas">
-        {level && (
-          <nav className="crumbs" aria-label="Folder">
-            {level.crumbs.map((c, k) => (
-              <span key={c.path}>
-                {k > 0 && <span className="sep">/</span>}
-                {k < level.crumbs.length - 1 ? (
-                  <button onClick={() => go(c.path)}>{c.name}</button>
-                ) : (
-                  <strong>{c.name}</strong>
-                )}
-              </span>
-            ))}
-          </nav>
-        )}
+      <main className={`canvas ${history ? "playing" : ""}`}>
+        <div className="canvas-head">
+          {level && (
+            <nav className="crumbs" aria-label="Folder">
+              {level.crumbs.map((c, k) => (
+                <span key={c.path}>
+                  {k > 0 && <span className="sep">/</span>}
+                  {k < level.crumbs.length - 1 ? (
+                    <button onClick={() => go(c.path)}>{c.name}</button>
+                  ) : (
+                    <strong>{c.name}</strong>
+                  )}
+                </span>
+              ))}
+            </nav>
+          )}
+          {level && (
+            <button
+              className={`btn history-btn ${history ? "on" : ""}`}
+              onClick={toggleHistory}
+            >
+              {history ? <Close size={15} /> : <History size={16} />}
+              {history ? "Close history" : "Play history"}
+            </button>
+          )}
+        </div>
         {levelError && <p className="state-text center">{levelError}</p>}
         {level && (
           <Diagram
@@ -382,17 +494,39 @@ export default function Atlas({ slug }: { slug: string }) {
             start={explain?.start ?? ""}
             selected={selected}
             lit={lit}
-            impact={blast?.perBox.size ? blast.perBox : null}
+            impact={!history && blast?.perBox.size ? blast.perBox : null}
+            growth={growth}
             link={arrow}
             onOpen={open}
             onLink={prove}
           />
         )}
-        {level && (
+        {history &&
+          (tl ? (
+            <TimelineBar
+              data={tl}
+              frame={frame}
+              playing={playing}
+              onFrame={(f) => {
+                setPlaying(false);
+                setFrame(f);
+              }}
+              onPlay={() => {
+                if (!playing && frame >= tl.frames.length - 1) setFrame(0);
+                setPlaying(!playing);
+              }}
+            />
+          ) : (
+            <div className="player">
+              <p className={tlError ? "muted" : "summary loading"}>
+                {tlError || "Reading the history…"}
+              </p>
+            </div>
+          ))}
+        {level && !history && (
           <p className="hint">
-            Arrows point from a part to the parts it uses. Click an arrow to
-            see the import lines behind it, or a box to see what depends on
-            it.
+            Arrows point from a part to the parts it uses. Click an arrow to see
+            the import lines behind it, or a box to see what depends on it.
           </p>
         )}
       </main>
@@ -413,7 +547,20 @@ export default function Atlas({ slug }: { slug: string }) {
           </button>
         </div>
 
-        {tab === "explain" && level && (
+        {tab === "explain" && level && history && (
+          <div className="side-body">
+            <HistoryPanel
+              tl={tl}
+              level={level}
+              frame={frame}
+              onFrame={(f) => {
+                setPlaying(false);
+                setFrame(f);
+              }}
+            />
+          </div>
+        )}
+        {tab === "explain" && level && !history && (
           <div className="side-body">
             {arrow && level.boxes[arrow.from] && level.boxes[arrow.to] ? (
               <LinkDetails
@@ -817,8 +964,8 @@ function Blast({
       ) : (
         <div className="blast">
           <p className="blast-num">
-            <strong>{n.toLocaleString()}</strong>{" "}
-            file{n === 1 ? " depends" : "s depend"} on it, {blast.direct.size}{" "}
+            <strong>{n.toLocaleString()}</strong> file
+            {n === 1 ? " depends" : "s depend"} on it, {blast.direct.size}{" "}
             directly. They are outlined on the diagram.
           </p>
           <ul className="file-list">
@@ -831,7 +978,9 @@ function Blast({
               </li>
             ))}
             {folders.size > top.length && (
-              <li className="more">and {folders.size - top.length} more folders</li>
+              <li className="more">
+                and {folders.size - top.length} more folders
+              </li>
             )}
           </ul>
         </div>
@@ -856,12 +1005,17 @@ function LinkDetails({
   onBack: () => void;
 }) {
   const files = snapshot.files;
-  const pairs = useMemo(() => pairsBetween(graph, from.files, to.files), [graph, from, to]);
+  const pairs = useMemo(
+    () => pairsBetween(graph, from.files, to.files),
+    [graph, from, to],
+  );
   const [proof, setProof] = useState<Evidence[] | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let alive = true;
-    const ask = pairs.slice(0, 40).map(([a, b]) => [files[a].path, files[b].path] as [string, string]);
+    const ask = pairs
+      .slice(0, 40)
+      .map(([a, b]) => [files[a].path, files[b].path] as [string, string]);
     fetchEvidence(snapshot.slug, snapshot.sha, ask)
       .then((e) => alive && setProof(e))
       .catch(() => alive && setFailed(true));
@@ -880,11 +1034,16 @@ function LinkDetails({
         {name(from)} uses {name(to)}
       </h2>
       <p className="muted">
-        {pairs.length} import{pairs.length === 1 ? "" : "s"} from {users} file{users === 1 ? "" : "s"}. Each one
-        is the real line in the code, linked to GitHub.
+        {pairs.length} import{pairs.length === 1 ? "" : "s"} from {users} file
+        {users === 1 ? "" : "s"}. Each one is the real line in the code, linked
+        to GitHub.
       </p>
-      {failed && <p className="muted">Couldn&apos;t load the import lines right now.</p>}
-      {!proof && !failed && <p className="summary loading">Finding the import lines…</p>}
+      {failed && (
+        <p className="muted">Couldn&apos;t load the import lines right now.</p>
+      )}
+      {!proof && !failed && (
+        <p className="summary loading">Finding the import lines…</p>
+      )}
       {proof && (
         <ul className="proof">
           {proof.map((e, k) => (
@@ -911,10 +1070,88 @@ function LinkDetails({
             </li>
           ))}
           {pairs.length > proof.length && (
-            <li className="more muted small">and {pairs.length - proof.length} more imports</li>
+            <li className="more muted small">
+              and {pairs.length - proof.length} more imports
+            </li>
           )}
         </ul>
       )}
+    </>
+  );
+}
+
+function HistoryPanel({
+  tl,
+  level,
+  frame,
+  onFrame,
+}: {
+  tl: Timeline | null;
+  level: import("@/lib/api").Level;
+  frame: number;
+  onFrame: (f: number) => void;
+}) {
+  if (!tl) return <p className="summary loading">Reading the history…</p>;
+  const fr = tl.frames;
+  const first = fr[0];
+  const now = fr[fr.length - 1];
+  const born = level.boxes
+    .map((b) => ({
+      b,
+      at: tl.boxes[b.id]?.lines.findIndex((v) => v > 0) ?? -1,
+    }))
+    .filter((x) => x.at >= 0)
+    .sort((a, b) => a.at - b.at);
+  let jump = 1;
+  for (let i = 2; i < fr.length; i++)
+    if (fr[i].lines - fr[i - 1].lines > fr[jump].lines - fr[jump - 1].lines)
+      jump = i;
+  const grew = fr.length > 1 ? fr[jump].lines - fr[jump - 1].lines : 0;
+  return (
+    <>
+      <h2>How it grew</h2>
+      <p className="muted">
+        {tl.commits.toLocaleString()} commits from {month(first.date)} to{" "}
+        {month(now.date)}, shown at {fr.length} evenly spaced points.
+      </p>
+      <dl className="facts">
+        <dt>First commit</dt>
+        <dd>
+          {month(first.date)} by {first.author}
+        </dd>
+        <dt>Today</dt>
+        <dd>
+          {shortNumber(now.files)} files, {shortNumber(now.lines)} lines
+        </dd>
+        {grew > 0 && (
+          <>
+            <dt>Biggest jump</dt>
+            <dd>
+              <button className="link-btn" onClick={() => onFrame(jump)}>
+                +{shortNumber(grew)} lines by {month(fr[jump].date)}
+              </button>
+            </dd>
+          </>
+        )}
+      </dl>
+      <h3>When each part appeared</h3>
+      <ul className="file-list">
+        {born.map(({ b, at }) => (
+          <li key={b.id}>
+            <button
+              className={at <= frame ? "" : "later"}
+              onClick={() => onFrame(at)}
+            >
+              <span>{b.kind === "folder" ? b.name + "/" : b.name}</span>
+              <em>{at === 0 ? "from the start" : month(fr[at].date)}</em>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="muted small">
+        Sizes come from each commit&apos;s file tree. Arrows show today&apos;s
+        imports between the parts that existed at that point.
+      </p>
     </>
   );
 }

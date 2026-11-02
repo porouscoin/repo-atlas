@@ -117,3 +117,33 @@ def read_tarball(data: bytes) -> dict[str, bytes]:
     return files
 
 
+
+
+async def commit_count(slug: str, sha: str) -> int:
+    """How many commits lead up to `sha`, read from the last page link of a one-per-page listing."""
+    resp = await _http().get(f"{API}/repos/{slug}/commits", params={"sha": sha, "per_page": 1})
+    if resp.status_code >= 400:
+        raise RepoError(f"Couldn't read the history (GitHub answered {resp.status_code}).")
+    m = re.search(r'[?&]page=(\d+)>; rel="last"', resp.headers.get("link", ""))
+    return int(m.group(1)) if m else len(resp.json())
+
+
+async def commit_at(slug: str, sha: str, n: int) -> dict:
+    """The n-th newest commit leading up to `sha` (1 is `sha` itself)."""
+    batch = await _get_json(f"{API}/repos/{slug}/commits", {"sha": sha, "per_page": 1, "page": n})
+    if not batch:
+        raise RepoError("Couldn't read the history.")
+    c = batch[0]
+    return {
+        "sha": c["sha"],
+        "tree": c["commit"]["tree"]["sha"],
+        "date": c["commit"]["author"]["date"],
+        "message": c["commit"]["message"].split("\n")[0][:140],
+        "author": (c.get("author") or {}).get("login") or c["commit"]["author"]["name"],
+    }
+
+
+async def tree_sizes(slug: str, tree: str) -> dict[str, int]:
+    """path -> size in bytes for every file in a commit, without downloading the code."""
+    data = await _get_json(f"{API}/repos/{slug}/git/trees/{tree}", {"recursive": 1})
+    return {e["path"]: e.get("size", 0) for e in data.get("tree", []) if e.get("type") == "blob"}

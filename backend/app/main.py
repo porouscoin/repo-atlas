@@ -11,7 +11,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import ai, store
+from . import ai, store, timeline
 from .analyze import build_snapshot
 from .config import models_for, settings
 from .imports import Resolver
@@ -196,6 +196,24 @@ async def get_level(slug: str, sha: str, path: str = ""):
         raise HTTPException(404, "No such folder in this repo.")
     view["explain"] = await store.cache_get(f"explain:{slug}:{sha}:{view['path']}")
     return view
+
+
+@app.get("/api/timeline")
+async def get_timeline(request: Request, slug: str, sha: str, path: str = ""):
+    """The boxes of one folder measured at evenly spaced points in the repo's history."""
+    slug = check(slug, sha)
+    snapshot, _ = await repo_state(slug, sha)
+    try:
+        view = level_view(snapshot, path)
+    except KeyError:
+        raise HTTPException(404, "No such folder in this repo.")
+    if timeline._frames.get((slug, sha)) is None:
+        limit(request, "timeline", settings.repos_per_hour)
+    try:
+        frames, total = await timeline.fetch_frames(slug, sha, timeline.frame_count(snapshot["totals"]["files"]))
+    except RepoError as e:
+        raise HTTPException(400, str(e))
+    return {"commits": total, **timeline.series(frames, snapshot, view)}
 
 
 class ExplainIn(BaseModel):
