@@ -301,7 +301,10 @@ h1, h2, h3, p { margin: 0; }
   .atlas.panel-open .ask-panel { transform: none; }
   .ap-head, .ap-body { min-width: 0; }
   .ap-input { min-width: 0; }
-  .topbar { top: 10px; left: 10px; right: 10px; }
+  .topbar { top: 10px; left: 10px; right: 10px; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .tools { justify-self: start; grid-row: 2; }
+  .search { grid-row: 3; }
+  .tool, .seg { height: 36px; }
   .repo-stats span:nth-child(n + 3) { display: none; }
   .seg button { padding: 0 9px; }
   .legend { left: 10px; bottom: 10px; }
