@@ -86,7 +86,7 @@ export default function TimelineBar({
   for (const yr of years)
     if (
       !shownYears.length ||
-      x(yr.j) - x(shownYears[shownYears.length - 1].j) >= 44
+      x(yr.j) - x(shownYears[shownYears.length - 1].j) >= 56
     )
       shownYears.push(yr);
 
