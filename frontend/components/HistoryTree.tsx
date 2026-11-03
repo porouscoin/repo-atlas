@@ -212,12 +212,8 @@ export default function HistoryTree({ data, tree, t, name }: Props) {
 
   const fr = data.frames[Math.round(t)];
   const period = data.frames[j].commits;
-  // One or two commit messages per stretch, oldest first, so they can be read.
-  const shown = period.slice(0, 2).reverse();
-  const ticker =
-    i !== j && shown.length
-      ? shown[Math.min(shown.length - 1, Math.floor(f * shown.length))]
-      : null;
+  // The latest commit of the stretch being played, one per stretch so it can be read.
+  const ticker = i !== j && period.length ? period[0] : null;
   const release = data.releases.find(
     (r) => r.date > data.frames[i].date && r.date <= data.frames[j].date,
   );

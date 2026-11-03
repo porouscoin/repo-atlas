@@ -165,11 +165,11 @@ export default function Atlas({ slug }: { slug: string }) {
 
   const tree = useMemo(() => (tl ? buildTree(tl) : null), [tl]);
 
-  // Smooth playback: about 0.8 seconds per sampled commit, 16 to 30 seconds in all.
+  // Smooth playback: about a second per sampled commit, 20 to 36 seconds in all.
   useEffect(() => {
     if (!playing || !tl) return;
     const last = tl.frames.length - 1;
-    const total = Math.max(16000, Math.min(30000, tl.frames.length * 800));
+    const total = Math.max(20000, Math.min(36000, tl.frames.length * 1000));
     let raf = 0;
     let prev = performance.now();
     const tick = (now: number) => {
@@ -1166,11 +1166,10 @@ function HistoryPanel({
         <>
           <h3>Releases</h3>
           <p className="muted">
-            {tl.releases.length} release{tl.releases.length === 1 ? "" : "s"},
-            from {tl.releases[0].tag} in {month(tl.releases[0].date)} to{" "}
-            {tl.releases[tl.releases.length - 1].tag} in{" "}
-            {month(tl.releases[tl.releases.length - 1].date)}. They are the
-            marks on the timeline.
+            {tl.releases.length >= 100
+              ? "100+ releases on GitHub."
+              : `${tl.releases.length} release${tl.releases.length === 1 ? "" : "s"} on GitHub since ${month(tl.releases[0].date)}.`}{" "}
+            The main ones are marked on the timeline.
           </p>
         </>
       )}

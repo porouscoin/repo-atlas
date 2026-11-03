@@ -60,7 +60,17 @@ export default function TimelineBar({
     }
     return null;
   };
-  const marks = releases
+  // With many releases, mark only the first of each minor (or major) version.
+  const key = (tag: string, depth: number) =>
+    tag.replace(/^v/, "").split(/[.-]/).slice(0, depth).join(".");
+  let main = releases;
+  for (const depth of [2, 1]) {
+    if (main.length <= 12) break;
+    main = main.filter(
+      (r, k) => k === 0 || key(r.tag, depth) !== key(main[k - 1].tag, depth),
+    );
+  }
+  const marks = main
     .map((r) => ({ ...r, x: when(r.date) }))
     .filter((r) => r.x !== null) as { tag: string; date: string; x: number }[];
   const labelled = marks.filter((m, k) => k === 0 || m.x - marks[k - 1].x > 46);
@@ -71,7 +81,14 @@ export default function TimelineBar({
     if (!years.length || years[years.length - 1].label !== yr)
       years.push({ j, label: yr });
   });
-  const every = Math.ceil(years.length / Math.max(2, Math.floor(W / 90)));
+  // Years sit unevenly (points are spaced by commits), so thin them by distance.
+  const shownYears: typeof years = [];
+  for (const yr of years)
+    if (
+      !shownYears.length ||
+      x(yr.j) - x(shownYears[shownYears.length - 1].j) >= 44
+    )
+      shownYears.push(yr);
 
   const seek = (clientX: number) => {
     const el = track.current;
@@ -147,13 +164,11 @@ export default function TimelineBar({
           ))}
         </div>
         <div className="track-years">
-          {years
-            .filter((_, k) => k % every === 0)
-            .map((yr) => (
-              <span key={yr.j} style={{ left: x(yr.j) }}>
-                {yr.label}
-              </span>
-            ))}
+          {shownYears.map((yr) => (
+            <span key={yr.j} style={{ left: x(yr.j) }}>
+              {yr.label}
+            </span>
+          ))}
         </div>
       </div>
     </div>
