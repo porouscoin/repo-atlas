@@ -26,3 +26,22 @@ def test_series_ends_on_todays_numbers():
     assert src["lines"] == [20, 150] and src["files"] == [1, 2]
     assert out["boxes"]["tests/"]["lines"] == [0, 40]
     assert out["frames"][-1]["lines"] == 190
+
+
+def test_files_over_time_tracks_every_path_and_period():
+    from app.timeline import files_over_time
+
+    snap = {"totals": {"loc": 100, "files": 2}}
+    c = lambda d, m, a: {"sha": "x" * 40, "date": d, "message": m, "author": a, "avatar": ""}
+    frames = [
+        {"sha": "a", "n": 1, "date": "2020-01-01", "message": "init", "author": "ann", "sizes": {"old.py": 300},
+         "recent": [c("2020-01-01", "init", "ann")], "releases": [{"tag": "v1", "date": "2020-06-01"}]},
+        {"sha": "b", "n": 5, "date": "2021-01-01", "message": "grow", "author": "bob", "sizes": {"a.py": 2000, "b.py": 1000},
+         "recent": [c("2021-01-01", "grow", "bob"), c("2020-09-01", "fix", "bob"), c("2020-01-01", "init", "ann")]},
+    ]
+    out = files_over_time(frames, snap, 5)
+    assert out["paths"] == ["a.py", "b.py", "old.py"]
+    assert out["sizes"][0] == [0, 67] and out["sizes"][2][1] == 0 and out["sizes"][2][0] > 0
+    assert [x["message"] for x in out["frames"][1]["commits"]] == ["grow", "fix"]
+    assert out["frames"][1]["people"] == [{"name": "bob", "avatar": "", "commits": 2}]
+    assert out["releases"][0]["tag"] == "v1" and out["langs"][0] == "Python"

@@ -24,7 +24,12 @@ export const GAP_X = 48;
 export const GAP_Y = 96;
 
 export type Placed = { x: number; y: number; row: number; loose: boolean };
-export type Layout = { boxes: Placed[]; width: number; height: number; looseRowY: number | null };
+export type Layout = {
+  boxes: Placed[];
+  width: number;
+  height: number;
+  looseRowY: number | null;
+};
 
 export function layout(boxes: Box[], links: Link[], perRow = 3): Layout {
   const n = boxes.length;
@@ -47,7 +52,9 @@ export function layout(boxes: Box[], links: Link[], perRow = 3): Layout {
     }
     state[v] = 2;
   };
-  const order = [...Array(n).keys()].sort((a, b) => boxes[b].loc - boxes[a].loc);
+  const order = [...Array(n).keys()].sort(
+    (a, b) => boxes[b].loc - boxes[a].loc,
+  );
   for (const v of order) if (state[v] === 0 && linked[v]) visit(v);
 
   // Longest path from the top: users above the things they use.
@@ -69,7 +76,11 @@ export function layout(boxes: Box[], links: Link[], perRow = 3): Layout {
 
   // Order each row by the average position of its neighbours above, a few sweeps.
   const pos = new Map<number, number>();
-  rows.forEach((r) => r.sort((a, b) => boxes[b].loc - boxes[a].loc).forEach((v, k) => pos.set(v, k)));
+  rows.forEach((r) =>
+    r
+      .sort((a, b) => boxes[b].loc - boxes[a].loc)
+      .forEach((v, k) => pos.set(v, k)),
+  );
   const neighbours = (v: number) => [
     ...out[v],
     ...links.filter((l) => l.to === v).map((l) => l.from),
@@ -79,7 +90,12 @@ export function layout(boxes: Box[], links: Link[], perRow = 3): Layout {
       const score = new Map(
         r.map((v) => {
           const ns = neighbours(v).filter((u) => pos.has(u));
-          return [v, ns.length ? ns.reduce((a, u) => a + pos.get(u)!, 0) / ns.length : pos.get(v)!];
+          return [
+            v,
+            ns.length
+              ? ns.reduce((a, u) => a + pos.get(u)!, 0) / ns.length
+              : pos.get(v)!,
+          ];
         }),
       );
       r.sort((a, b) => score.get(a)! - score.get(b)!);
@@ -89,10 +105,15 @@ export function layout(boxes: Box[], links: Link[], perRow = 3): Layout {
 
   // Wrap wide rows, then add the unlinked boxes last.
   const lines: { members: number[]; loose: boolean }[] = [];
-  for (const r of rows) for (let k = 0; k < r.length; k += perRow) lines.push({ members: r.slice(k, k + perRow), loose: false });
-  const loose = [...Array(n).keys()].filter((v) => !linked[v]).sort((a, b) => boxes[b].loc - boxes[a].loc);
+  for (const r of rows)
+    for (let k = 0; k < r.length; k += perRow)
+      lines.push({ members: r.slice(k, k + perRow), loose: false });
+  const loose = [...Array(n).keys()]
+    .filter((v) => !linked[v])
+    .sort((a, b) => boxes[b].loc - boxes[a].loc);
   const firstLoose = lines.length;
-  for (let k = 0; k < loose.length; k += perRow) lines.push({ members: loose.slice(k, k + perRow), loose: true });
+  for (let k = 0; k < loose.length; k += perRow)
+    lines.push({ members: loose.slice(k, k + perRow), loose: true });
 
   const widest = Math.max(1, ...lines.map((l) => l.members.length));
   const width = widest * CARD_W + (widest - 1) * GAP_X;
@@ -106,11 +127,21 @@ export function layout(boxes: Box[], links: Link[], perRow = 3): Layout {
     }
     const w = line.members.length * CARD_W + (line.members.length - 1) * GAP_X;
     line.members.forEach((v, k) => {
-      placed[v] = { x: (width - w) / 2 + k * (CARD_W + GAP_X), y, row, loose: line.loose };
+      placed[v] = {
+        x: (width - w) / 2 + k * (CARD_W + GAP_X),
+        y,
+        row,
+        loose: line.loose,
+      };
     });
     y += CARD_H + GAP_Y;
   });
-  return { boxes: placed, width, height: Math.max(CARD_H, y - GAP_Y), looseRowY };
+  return {
+    boxes: placed,
+    width,
+    height: Math.max(CARD_H, y - GAP_Y),
+    looseRowY,
+  };
 }
 
 /**
@@ -119,7 +150,10 @@ export function layout(boxes: Box[], links: Link[], perRow = 3): Layout {
  * links are kept (every part keeps its main one). Returns what to draw and
  * how many links were left out.
  */
-export function simplify(links: Link[], n: number): { shown: Link[]; hidden: number } {
+export function simplify(
+  links: Link[],
+  n: number,
+): { shown: Link[]; hidden: number } {
   const byPair = new Map<string, Link>();
   for (const l of links) {
     const key = l.from < l.to ? `${l.from}-${l.to}` : `${l.to}-${l.from}`;
@@ -130,7 +164,8 @@ export function simplify(links: Link[], n: number): { shown: Link[]; hidden: num
   const budget = Math.max(4, n);
   const keep = new Set(pairs.slice(0, budget));
   const strongestOut = new Map<number, Link>();
-  for (const l of pairs) if (!strongestOut.has(l.from)) strongestOut.set(l.from, l);
+  for (const l of pairs)
+    if (!strongestOut.has(l.from)) strongestOut.set(l.from, l);
   for (const l of strongestOut.values()) keep.add(l);
   const shown = pairs.filter((l) => keep.has(l));
   return { shown, hidden: links.length - shown.length };

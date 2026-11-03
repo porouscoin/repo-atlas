@@ -147,3 +147,37 @@ async def tree_sizes(slug: str, tree: str) -> dict[str, int]:
     """path -> size in bytes for every file in a commit, without downloading the code."""
     data = await _get_json(f"{API}/repos/{slug}/git/trees/{tree}", {"recursive": 1})
     return {e["path"]: e.get("size", 0) for e in data.get("tree", []) if e.get("type") == "blob"}
+
+
+def _commit_row(c: dict) -> dict:
+    who = c.get("author") or {}
+    return {
+        "sha": c["sha"][:7],
+        "date": c["commit"]["author"]["date"],
+        "message": c["commit"]["message"].split("\n")[0][:120],
+        "author": who.get("login") or c["commit"]["author"]["name"],
+        "avatar": who.get("avatar_url") or "",
+    }
+
+
+async def recent_commits(slug: str, sha: str, n: int = 30) -> list[dict]:
+    """The n commits leading up to `sha`, newest first."""
+    try:
+        batch = await _get_json(f"{API}/repos/{slug}/commits", {"sha": sha, "per_page": n})
+    except RepoError:
+        return []
+    return [_commit_row(c) for c in batch]
+
+
+async def releases(slug: str) -> list[dict]:
+    """Published releases, oldest first. Empty when the repo only uses bare tags."""
+    try:
+        batch = await _get_json(f"{API}/repos/{slug}/releases", {"per_page": 100})
+    except RepoError:
+        return []
+    out = [
+        {"tag": r.get("tag_name") or "", "date": r.get("published_at") or r.get("created_at") or ""}
+        for r in batch
+        if not r.get("draft") and not r.get("prerelease")
+    ]
+    return sorted((r for r in out if r["date"]), key=lambda r: r["date"])

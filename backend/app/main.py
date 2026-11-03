@@ -216,6 +216,20 @@ async def get_timeline(request: Request, slug: str, sha: str, path: str = ""):
     return {"commits": total, **timeline.series(frames, snapshot, view)}
 
 
+@app.get("/api/history")
+async def get_history(request: Request, slug: str, sha: str):
+    """Every file's size at evenly spaced commits, with each period's commits, people and releases."""
+    slug = check(slug, sha)
+    snapshot, _ = await repo_state(slug, sha)
+    if timeline._frames.get((slug, sha)) is None:
+        limit(request, "timeline", settings.repos_per_hour)
+    try:
+        frames, total = await timeline.fetch_frames(slug, sha, timeline.frame_count(snapshot["totals"]["files"]))
+    except RepoError as e:
+        raise HTTPException(400, str(e))
+    return timeline.files_over_time(frames, snapshot, total)
+
+
 class ExplainIn(BaseModel):
     slug: str
     sha: str

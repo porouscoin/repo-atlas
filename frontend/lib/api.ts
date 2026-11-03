@@ -1,6 +1,13 @@
-export const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+export const API = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+).replace(/\/$/, "");
 
-export type FileNode = { path: string; lang: string; loc: number; bytes: number };
+export type FileNode = {
+  path: string;
+  lang: string;
+  loc: number;
+  bytes: number;
+};
 
 export type Snapshot = {
   slug: string;
@@ -21,7 +28,11 @@ export type Snapshot = {
   cached?: boolean;
 };
 
-export type Explain = { summary: string; boxes: Record<string, string>; start: string };
+export type Explain = {
+  summary: string;
+  boxes: Record<string, string>;
+  start: string;
+};
 export type Level = {
   path: string;
   crumbs: { name: string; path: string }[];
@@ -31,7 +42,12 @@ export type Level = {
 };
 
 export type AskEvent =
-  | { type: "tool"; name: string; args: Record<string, unknown>; files: string[] }
+  | {
+      type: "tool";
+      name: string;
+      args: Record<string, unknown>;
+      files: string[];
+    }
   | { type: "answer"; text: string; files: string[]; model?: string }
   | { type: "error"; message: string };
 
@@ -51,11 +67,23 @@ export async function fetchRepo(slug: string): Promise<Snapshot> {
   return asJson(await fetch(`${API}/api/repo?url=${encodeURIComponent(slug)}`));
 }
 
-export async function fetchLevel(slug: string, sha: string, path: string): Promise<Level> {
-  return asJson(await fetch(`${API}/api/level?slug=${encodeURIComponent(slug)}&sha=${sha}&path=${encodeURIComponent(path)}`));
+export async function fetchLevel(
+  slug: string,
+  sha: string,
+  path: string,
+): Promise<Level> {
+  return asJson(
+    await fetch(
+      `${API}/api/level?slug=${encodeURIComponent(slug)}&sha=${sha}&path=${encodeURIComponent(path)}`,
+    ),
+  );
 }
 
-export async function fetchExplain(slug: string, sha: string, path: string): Promise<Explain> {
+export async function fetchExplain(
+  slug: string,
+  sha: string,
+  path: string,
+): Promise<Explain> {
   return asJson(
     await fetch(`${API}/api/explain`, {
       method: "POST",
@@ -65,7 +93,11 @@ export async function fetchExplain(slug: string, sha: string, path: string): Pro
   );
 }
 
-export async function fetchSummary(slug: string, sha: string, path: string): Promise<string> {
+export async function fetchSummary(
+  slug: string,
+  sha: string,
+  path: string,
+): Promise<string> {
   const r = await asJson<{ summary: string }>(
     await fetch(`${API}/api/summary`, {
       method: "POST",
@@ -114,9 +146,18 @@ export async function ask(
   }
 }
 
-export type Evidence = { from: string; to: string; line: number | null; text: string };
+export type Evidence = {
+  from: string;
+  to: string;
+  line: number | null;
+  text: string;
+};
 
-export async function fetchEvidence(slug: string, sha: string, pairs: [string, string][]): Promise<Evidence[]> {
+export async function fetchEvidence(
+  slug: string,
+  sha: string,
+  pairs: [string, string][],
+): Promise<Evidence[]> {
   const r = await asJson<{ evidence: Evidence[] }>(
     await fetch(`${API}/api/evidence`, {
       method: "POST",
@@ -129,10 +170,37 @@ export async function fetchEvidence(slug: string, sha: string, pairs: [string, s
 
 export type Timeline = {
   commits: number;
-  frames: { sha: string; n: number; date: string; message: string; author: string; files: number; lines: number }[];
+  frames: {
+    sha: string;
+    n: number;
+    date: string;
+    message: string;
+    author: string;
+    files: number;
+    lines: number;
+  }[];
   boxes: Record<string, { lines: number[]; files: number[] }>;
 };
 
-export async function fetchTimeline(slug: string, sha: string, path: string): Promise<Timeline> {
-  return asJson(await fetch(`${API}/api/timeline?slug=${encodeURIComponent(slug)}&sha=${sha}&path=${encodeURIComponent(path)}`));
+export async function fetchTimeline(
+  slug: string,
+  sha: string,
+  path: string,
+): Promise<Timeline> {
+  return asJson(
+    await fetch(
+      `${API}/api/timeline?slug=${encodeURIComponent(slug)}&sha=${sha}&path=${encodeURIComponent(path)}`,
+    ),
+  );
+}
+
+export async function fetchHistory(
+  slug: string,
+  sha: string,
+): Promise<import("./history").HistoryData> {
+  return asJson(
+    await fetch(
+      `${API}/api/history?slug=${encodeURIComponent(slug)}&sha=${sha}`,
+    ),
+  );
 }

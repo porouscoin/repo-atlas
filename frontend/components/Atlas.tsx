@@ -10,13 +10,12 @@ import {
   fetchLevel,
   fetchRepo,
   fetchSummary,
-  fetchTimeline,
+  fetchHistory,
   type AskEvent,
   type Evidence,
   type Explain,
   type Level,
   type Snapshot,
-  type Timeline,
 } from "@/lib/api";
 import {
   buildGraph,
@@ -36,7 +35,9 @@ import {
   Logo,
   Star,
 } from "./Icons";
-import TimelineBar, { lerp, month, riverBands } from "./TimelineBar";
+import HistoryTree from "./HistoryTree";
+import TimelineBar, { month } from "./TimelineBar";
+import { buildTree, type HistoryData } from "@/lib/history";
 import Markdown from "./Markdown";
 import ThemeToggle from "./ThemeToggle";
 
@@ -86,11 +87,10 @@ export default function Atlas({ slug }: { slug: string }) {
   const [litPaths, setLitPaths] = useState<string[] | null>(null);
   const [arrow, setArrow] = useState<Arrow | null>(null);
   const [history, setHistory] = useState(false);
-  const [tl, setTl] = useState<Timeline | null>(null);
+  const [tl, setTl] = useState<HistoryData | null>(null);
   const [tlError, setTlError] = useState("");
   const [frame, setFrame] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [band, setBand] = useState<number | null>(null); // box hovered in the river or the diagram
   const chatEnd = useRef<HTMLDivElement>(null);
 
   // --------------------------------------------------------------- loading
@@ -147,30 +147,29 @@ export default function Atlas({ slug }: { slug: string }) {
   // ---------------------------------------------------------------- history
 
   useEffect(() => {
-    if (!history || !snapshot || !level) return;
+    if (!history || !snapshot || tl) return;
     let alive = true;
     setTlError("");
-    fetchTimeline(snapshot.slug, snapshot.sha, level.path)
-      .then((t) => {
+    fetchHistory(snapshot.slug, snapshot.sha)
+      .then((h) => {
         if (!alive) return;
-        setTl((old) => {
-          if (!old) {
-            setFrame(0);
-            setPlaying(true);
-          }
-          return t;
-        });
+        setTl(h);
+        setFrame(0);
+        setPlaying(true);
       })
       .catch((e) => alive && setTlError(e.message));
     return () => {
       alive = false;
     };
-  }, [history, snapshot, level]);
+  }, [history, snapshot, tl]);
 
-  // Smooth playback: the whole history takes about 14 seconds, whatever its length.
+  const tree = useMemo(() => (tl ? buildTree(tl) : null), [tl]);
+
+  // Smooth playback: about 0.8 seconds per sampled commit, 16 to 30 seconds in all.
   useEffect(() => {
     if (!playing || !tl) return;
     const last = tl.frames.length - 1;
+    const total = Math.max(16000, Math.min(30000, tl.frames.length * 800));
     let raf = 0;
     let prev = performance.now();
     const tick = (now: number) => {
@@ -178,7 +177,7 @@ export default function Atlas({ slug }: { slug: string }) {
       prev = now;
       let done = false;
       setFrame((f) => {
-        const next = f + (dt / 14000) * last;
+        const next = f + (dt / total) * last;
         if (next >= last) {
           done = true;
           return last;
@@ -191,37 +190,6 @@ export default function Atlas({ slug }: { slug: string }) {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [playing, tl]);
-
-  const colors = useMemo(() => {
-    const m = new Map<number, string>();
-    if (tl && level)
-      for (const b of riverBands(level.boxes, tl)) m.set(b.k, b.color);
-    return m;
-  }, [tl, level]);
-
-  const growth = useMemo(() => {
-    if (!history || !tl || !level) return null;
-    const m = new Map<
-      number,
-      { lines: number; files: number; grew: boolean; color?: string }
-    >();
-    const i = Math.floor(frame);
-    level.boxes.forEach((b, k) => {
-      const s = tl.boxes[b.id];
-      if (!s) return;
-      const lines = s.lines[i] ? Math.round(lerp(s.lines, frame)) : 0;
-      m.set(k, {
-        lines,
-        files: s.files[Math.round(frame)] ?? 0,
-        // growing right now by a real step, not a one-line fix
-        grew:
-          i + 1 < s.lines.length &&
-          s.lines[i + 1] - s.lines[i] > Math.max(20, b.loc * 0.03),
-        color: colors.get(k),
-      });
-    });
-    return m.size ? m : null;
-  }, [history, tl, level, frame, colors]);
 
   const toggleHistory = () => {
     if (history) {
@@ -505,7 +473,15 @@ export default function Atlas({ slug }: { slug: string }) {
           )}
         </div>
         {levelError && <p className="state-text center">{levelError}</p>}
-        {level && (
+        {history && tl && tree && (
+          <HistoryTree
+            data={tl}
+            tree={tree}
+            t={frame}
+            name={snapshot.slug.split("/")[1]}
+          />
+        )}
+        {level && !history && (
           <Diagram
             key={level.path}
             boxes={level.boxes}
@@ -513,10 +489,8 @@ export default function Atlas({ slug }: { slug: string }) {
             roles={explain?.boxes ?? (explainError ? {} : null)}
             start={explain?.start ?? ""}
             selected={selected}
-            lit={history ? (band !== null ? new Set([band]) : null) : lit}
-            onHoverBox={history ? setBand : undefined}
-            impact={!history && blast?.perBox.size ? blast.perBox : null}
-            growth={growth}
+            lit={lit}
+            impact={blast?.perBox.size ? blast.perBox : null}
             link={arrow}
             onOpen={open}
             onLink={prove}
@@ -525,12 +499,10 @@ export default function Atlas({ slug }: { slug: string }) {
         {history &&
           (tl ? (
             <TimelineBar
-              data={tl}
-              boxes={level?.boxes ?? []}
+              frames={tl.frames}
+              releases={tl.releases}
               t={frame}
               playing={playing}
-              hover={band}
-              onHover={setBand}
               onSeek={(f) => {
                 setPlaying(false);
                 setFrame(f);
@@ -576,8 +548,7 @@ export default function Atlas({ slug }: { slug: string }) {
             <HistoryPanel
               tl={tl}
               level={level}
-              frame={Math.round(frame)}
-              colors={colors}
+              frame={frame}
               onFrame={(f) => {
                 setPlaying(false);
                 setFrame(f);
@@ -1109,79 +1080,119 @@ function HistoryPanel({
   tl,
   level,
   frame,
-  colors,
   onFrame,
 }: {
-  colors: Map<number, string>;
-  tl: Timeline | null;
+  tl: HistoryData | null;
   level: import("@/lib/api").Level;
   frame: number;
   onFrame: (f: number) => void;
 }) {
+  const born = useMemo(() => {
+    if (!tl) return [];
+    const index = new Map(tl.paths.map((p, k) => [p, k]));
+    return level.boxes
+      .map((b) => {
+        const rows =
+          b.kind === "folder"
+            ? tl.paths.flatMap((p, k) => (p.startsWith(b.target) ? [k] : []))
+            : b.kind === "file"
+              ? [index.get(b.target) ?? -1].filter((k) => k >= 0)
+              : [];
+        const at = rows.length
+          ? Math.min(
+              ...rows
+                .map((k) => tl.sizes[k].findIndex((v) => v > 0))
+                .filter((v) => v >= 0),
+            )
+          : -1;
+        return { b, at: Number.isFinite(at) ? at : -1 };
+      })
+      .filter((x) => x.at >= 0)
+      .sort((a, b) => a.at - b.at);
+  }, [tl, level]);
+
   if (!tl) return <p className="summary loading">Reading the history…</p>;
   const fr = tl.frames;
   const first = fr[0];
   const now = fr[fr.length - 1];
-  const born = level.boxes
-    .map((b, k) => ({
-      b,
-      k,
-      at: tl.boxes[b.id]?.lines.findIndex((v) => v > 0) ?? -1,
-    }))
-    .filter((x) => x.at >= 0)
-    .sort((a, b) => a.at - b.at);
-  let jump = 1;
-  for (let i = 2; i < fr.length; i++)
-    if (fr[i].lines - fr[i - 1].lines > fr[jump].lines - fr[jump - 1].lines)
-      jump = i;
-  const grew = fr.length > 1 ? fr[jump].lines - fr[jump - 1].lines : 0;
+  const i = Math.min(fr.length - 1, Math.floor(frame) + 1);
+  const period = fr[i];
+  const people = period.people;
   return (
     <>
       <h2>How it grew</h2>
       <p className="muted">
         {tl.commits.toLocaleString()} commits from {month(first.date)} to{" "}
-        {month(now.date)}, shown at {fr.length} evenly spaced points.
+        {month(now.date)}. First commit by {first.author}.
       </p>
-      <dl className="facts">
-        <dt>First commit</dt>
-        <dd>
-          {month(first.date)} by {first.author}
-        </dd>
-        <dt>Today</dt>
-        <dd>
-          {shortNumber(now.files)} files, {shortNumber(now.lines)} lines
-        </dd>
-        {grew > 0 && (
-          <>
-            <dt>Biggest jump</dt>
-            <dd>
-              <button className="link-btn" onClick={() => onFrame(jump)}>
-                +{shortNumber(grew)} lines by {month(fr[jump].date)}
-              </button>
-            </dd>
-          </>
-        )}
-      </dl>
+
+      <h3>
+        {i === 0
+          ? "At the start"
+          : `${month(fr[i - 1].date)} to ${month(period.date)}`}
+      </h3>
+      {people.length > 0 && (
+        <ul className="people">
+          {people.map((p) => (
+            <li key={p.name}>
+              {p.avatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={`${p.avatar}${p.avatar.includes("?") ? "&" : "?"}s=48`}
+                  alt=""
+                  width={24}
+                  height={24}
+                />
+              ) : (
+                <span className="avatar">
+                  {p.name.slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              <span>{p.name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <ul className="commits">
+        {period.commits.slice(0, 6).map((c) => (
+          <li key={c.sha}>
+            <span>{c.message}</span>
+            <em>{c.author}</em>
+          </li>
+        ))}
+      </ul>
+
+      {tl.releases.length > 0 && (
+        <>
+          <h3>Releases</h3>
+          <p className="muted">
+            {tl.releases.length} release{tl.releases.length === 1 ? "" : "s"},
+            from {tl.releases[0].tag} in {month(tl.releases[0].date)} to{" "}
+            {tl.releases[tl.releases.length - 1].tag} in{" "}
+            {month(tl.releases[tl.releases.length - 1].date)}. They are the
+            marks on the timeline.
+          </p>
+        </>
+      )}
+
       <h3>When each part appeared</h3>
       <ul className="file-list">
-        {born.map(({ b, k, at }) => (
+        {born.map(({ b, at }) => (
           <li key={b.id}>
             <button
               className={at <= frame ? "" : "later"}
               onClick={() => onFrame(at)}
             >
-              <span>
-                <i className="swatch" style={{ background: colors.get(k) }} />
-                {b.kind === "folder" ? b.name + "/" : b.name}
-              </span>
+              <span>{b.kind === "folder" ? b.name + "/" : b.name}</span>
               <em>{at === 0 ? "from the start" : month(fr[at].date)}</em>
             </button>
           </li>
         ))}
       </ul>
       <p className="muted small">
-        Sizes come from each commit&apos;s file tree. Arrows show today&apos;s
-        imports between the parts that existed at that point.
+        Read from {fr.length} evenly spaced commits. Each dot is a file, colored
+        by language. Ochre rings mark files added or edited since the last
+        point.
       </p>
     </>
   );

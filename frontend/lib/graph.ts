@@ -17,23 +17,32 @@ export function buildGraph(s: Snapshot): Graph {
     imports[a].push(b);
     importers[b].push(a);
   }
-  const folderOf = s.files.map((f) => (f.path.includes("/") ? f.path.slice(0, f.path.lastIndexOf("/")) : ""));
-  const topFolder = s.files.map((f) => (f.path.includes("/") ? f.path.split("/")[0] : ""));
+  const folderOf = s.files.map((f) =>
+    f.path.includes("/") ? f.path.slice(0, f.path.lastIndexOf("/")) : "",
+  );
+  const topFolder = s.files.map((f) =>
+    f.path.includes("/") ? f.path.split("/")[0] : "",
+  );
   return { index, imports, importers, folderOf, topFolder };
 }
 
 export function shortNumber(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1_000_000)
+    return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
   if (n >= 10_000) return Math.round(n / 1000) + "k";
   if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
   return String(n);
 }
 
 /** Every file that would feel a change to `files`, directly or through others. */
-export function dependents(g: Graph, files: number[]): { all: number[]; direct: Set<number> } {
+export function dependents(
+  g: Graph,
+  files: number[],
+): { all: number[]; direct: Set<number> } {
   const inside = new Set(files);
   const direct = new Set<number>();
-  for (const f of files) for (const i of g.importers[f]) if (!inside.has(i)) direct.add(i);
+  for (const f of files)
+    for (const i of g.importers[f]) if (!inside.has(i)) direct.add(i);
   const seen = new Set<number>(direct);
   const queue = [...direct];
   while (queue.length) {
@@ -48,9 +57,14 @@ export function dependents(g: Graph, files: number[]): { all: number[]; direct: 
 }
 
 /** File pairs (user, used) behind an arrow from one set of files to another. */
-export function pairsBetween(g: Graph, from: number[], to: number[]): [number, number][] {
+export function pairsBetween(
+  g: Graph,
+  from: number[],
+  to: number[],
+): [number, number][] {
   const target = new Set(to);
   const out: [number, number][] = [];
-  for (const a of from) for (const b of g.imports[a]) if (target.has(b)) out.push([a, b]);
+  for (const a of from)
+    for (const b of g.imports[a]) if (target.has(b)) out.push([a, b]);
   return out;
 }

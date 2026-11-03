@@ -11,6 +11,7 @@ import asyncio
 
 from . import github
 from .analyze import keep
+from .imports import language
 from .store import LRU
 
 _frames = LRU(6)  # (slug, sha) -> frames, oldest first
@@ -38,14 +39,68 @@ async def fetch_frames(slug: str, sha: str, k: int) -> tuple[list[dict], int]:
         async with sem:
             c = await github.commit_at(slug, sha, n)
             sizes = await github.tree_sizes(slug, c["tree"])
+            c["recent"] = await github.recent_commits(slug, c["sha"])
         c.pop("tree")
         c["n"] = total - n + 1  # 1 = first commit
         c["sizes"] = {p: s for p, s in sizes.items() if keep(p, b"")}
         return c
 
-    frames = await asyncio.gather(*(one(n) for n in pick(total, k)))
+    frames, rel = await asyncio.gather(asyncio.gather(*(one(n) for n in pick(total, k))), github.releases(slug))
+    frames = list(frames)
+    frames[0]["releases"] = rel  # kept with the frames so one cache entry holds everything
     _frames.set((slug, sha), (frames, total))
     return frames, total
+
+
+MAX_PATHS = 5000
+
+
+def files_over_time(frames: list[dict], snapshot: dict, total: int) -> dict:
+    """Every file that ever existed in the sampled history with its size (in
+    lines) at each frame, plus what happened in each period: its commits and
+    the people behind them. This drives the growing file tree."""
+    head_bytes = sum(frames[-1]["sizes"].values()) or 1
+    ratio = snapshot["totals"]["loc"] / head_bytes
+    seen: dict[str, int] = {}
+    for f in frames:
+        for p, s in f["sizes"].items():
+            seen[p] = max(seen.get(p, 0), s)
+    paths = sorted(seen)
+    if len(paths) > MAX_PATHS:
+        keep_set = set(sorted(paths, key=lambda p: -seen[p])[:MAX_PATHS])
+        paths = [p for p in paths if p in keep_set]
+    sizes = [[max(1, round(f["sizes"][p] * ratio)) if p in f["sizes"] else 0 for f in frames] for p in paths]
+
+    out_frames = []
+    prev_date = ""
+    for f in frames:
+        period = [c for c in f.get("recent", []) if c["date"] > prev_date] if prev_date else f.get("recent", [])[:1]
+        people: dict[str, dict] = {}
+        for c in period:
+            p = people.setdefault(c["author"], {"name": c["author"], "avatar": c["avatar"], "commits": 0})
+            p["commits"] += 1
+        out_frames.append(
+            {
+                "sha": f["sha"],
+                "n": f["n"],
+                "date": f["date"],
+                "message": f["message"],
+                "author": f["author"],
+                "files": len(f["sizes"]),
+                "lines": round(sum(f["sizes"].values()) * ratio),
+                "commits": [{k: c[k] for k in ("sha", "date", "message", "author")} for c in period[:12]],
+                "people": sorted(people.values(), key=lambda p: -p["commits"])[:6],
+            }
+        )
+        prev_date = f["date"]
+    return {
+        "commits": total,
+        "frames": out_frames,
+        "paths": paths,
+        "langs": [language(p) for p in paths],
+        "sizes": sizes,
+        "releases": frames[0].get("releases", []),
+    }
 
 
 def series(frames: list[dict], snapshot: dict, view: dict) -> dict:
